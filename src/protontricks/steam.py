@@ -66,8 +66,9 @@ class SteamApp(object):
         "last_updated", "required_tool_appid", "required_tool_app"
     )
 
+    # pylint: disable=too-many-arguments
     def __init__(
-            self, name, install_path, icon_path=None, prefix_path=None,
+            self, name, install_path, *, icon_path=None, prefix_path=None,
             appid=None, last_updated=None, required_tool_appid=None):
         """
         :appid: App's appid
