@@ -1387,3 +1387,43 @@ def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
 
     assert len(steamapps_dirs) == 4
     assert steamapps_dirs[0].name == "steamapps"
+
+def test_get_compat_tool_dirs(monkeypatch):
+    from protontricks.steam import get_compat_tool_dirs, COMMON_COMPAT_TOOL_DIRS
+    monkeypatch.delenv("STEAM_EXTRA_COMPAT_TOOLS_PATHS", raising=False)
+    steam_root = Path("/fake/steam/root")
+
+    paths = get_compat_tool_dirs(steam_root)
+
+    expected_paths = [Path(p) for p in COMMON_COMPAT_TOOL_DIRS]
+    expected_paths.append(steam_root / "compatibilitytools.d")
+
+    assert paths == expected_paths
+
+def test_get_compat_tool_dirs_with_env(monkeypatch):
+    from protontricks.steam import get_compat_tool_dirs, COMMON_COMPAT_TOOL_DIRS
+    monkeypatch.setenv(
+        "STEAM_EXTRA_COMPAT_TOOLS_PATHS",
+        f"/custom/path1{os.pathsep}/custom/path2"
+    )
+    steam_root = Path("/fake/steam/root")
+
+    paths = get_compat_tool_dirs(steam_root)
+
+    expected_paths = [Path(p) for p in COMMON_COMPAT_TOOL_DIRS]
+    expected_paths.extend([Path("/custom/path1"), Path("/custom/path2")])
+    expected_paths.append(steam_root / "compatibilitytools.d")
+
+    assert paths == expected_paths
+
+def test_get_compat_tool_dirs_empty_env(monkeypatch):
+    from protontricks.steam import get_compat_tool_dirs, COMMON_COMPAT_TOOL_DIRS
+    monkeypatch.setenv("STEAM_EXTRA_COMPAT_TOOLS_PATHS", "")
+    steam_root = Path("/fake/steam/root")
+
+    paths = get_compat_tool_dirs(steam_root)
+
+    expected_paths = [Path(p) for p in COMMON_COMPAT_TOOL_DIRS]
+    expected_paths.append(steam_root / "compatibilitytools.d")
+
+    assert paths == expected_paths
