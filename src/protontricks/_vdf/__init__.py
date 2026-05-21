@@ -348,8 +348,13 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
     float32 = struct.Struct('<f')
 
     def read_string(fp, wide=False):
-        buf, end = b'', -1
+        chunks = []
+        end = -1
         offset = fp.tell()
+        terminator = b'\x00\x00' if wide else b'\x00'
+        term_len = len(terminator)
+        total_len = 0
+        tail = b''
 
         # locate string end
         while end == -1:
@@ -358,8 +363,18 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
             if chunk == b'':
                 raise SyntaxError("Unterminated cstring (offset: %d)" % offset)
 
-            buf += chunk
-            end = buf.find(b'\x00\x00' if wide else b'\x00')
+            chunks.append(chunk)
+
+            search_buf = tail + chunk
+            chunk_end = search_buf.find(terminator)
+
+            if chunk_end != -1:
+                end = total_len - len(tail) + chunk_end
+
+            total_len += len(chunk)
+            tail = chunk[-(term_len - 1):] if term_len > 1 else b''
+
+        buf = b''.join(chunks)
 
         if wide:
             end += end % 2
