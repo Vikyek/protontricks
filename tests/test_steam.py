@@ -8,6 +8,7 @@ import vdf
 
 from protontricks.steam import (SteamApp, _get_steamapps_subdirs,
                                 find_appid_proton_prefix,
+                                find_proton_app,
                                 find_steam_compat_tool_app,
                                 find_steam_installations, find_steam_path,
                                 get_custom_compat_tool_installations,
@@ -255,6 +256,165 @@ class TestSteamApp:
         ) is None
 
 
+
+
+class TestFindProtonApp:
+    def test_find_proton_app_with_env_var(
+            self, steam_app_factory, steam_dir, default_proton,
+            proton_factory, monkeypatch, caplog):
+        """
+        Check that $PROTON_VERSION overrides the default configured app
+        """
+        custom_proton = proton_factory(
+            name="Proton 6.66", appid=54440, compat_tool_name="proton_6_66"
+        )
+        steam_app_factory(
+            name="Fake game", appid=10,
+            compat_tool_name="proton_6_66"
+        )
+
+        monkeypatch.setenv("PROTON_VERSION", "Proton 4.20")
+
+        proton_app = find_proton_app(
+            steam_path=steam_dir,
+            steam_apps=[default_proton, custom_proton],
+            appid=10
+        )
+
+        assert proton_app.name == "Proton 4.20"
+        assert "Found requested Proton version: Proton 4.20" in [
+            r.message for r in caplog.records
+        ]
+
+    def test_find_proton_app_with_env_var_not_found(
+            self, steam_app_factory, steam_dir, default_proton,
+            monkeypatch, caplog):
+        """
+        Check that None is returned and error is logged when PROTON_VERSION
+        is set but app isn't found
+        """
+        steam_app_factory(
+            name="Fake game", appid=10,
+        )
+
+        monkeypatch.setenv("PROTON_VERSION", "Proton Nonexistent")
+
+        proton_app = find_proton_app(
+            steam_path=steam_dir,
+            steam_apps=[default_proton],
+            appid=10
+        )
+
+        assert proton_app is None
+        assert any(
+            "$PROTON_VERSION was set but matching Proton installation could not be found."
+            in r.message for r in caplog.records
+        )
+
+    def test_find_proton_app_with_compat_tool(
+            self, steam_app_factory, steam_dir, default_proton,
+            proton_factory, caplog):
+        """
+        Check that find_proton_app returns the app from find_steam_compat_tool_app
+        if no env var is set
+        """
+        custom_proton = proton_factory(
+            name="Proton 6.66", appid=54440, compat_tool_name="proton_6_66"
+        )
+        steam_app_factory(
+            name="Fake game", appid=10,
+            compat_tool_name="proton_6_66"
+        )
+
+        proton_app = find_proton_app(
+            steam_path=steam_dir,
+            steam_apps=[default_proton, custom_proton],
+            appid=10
+        )
+
+        assert proton_app.name == "Proton 6.66"
+        assert any(
+            "Active compatibility tool is a Proton installation"
+            in r.message for r in caplog.records
+        )
+
+    def test_find_proton_app_not_found(
+            self, steam_app_factory, steam_dir, steam_config_path, caplog):
+        """
+        Check that find_proton_app returns None when find_steam_compat_tool_app
+        doesn't find anything
+        """
+        steam_app_factory(
+            name="Fake game", appid=10,
+        )
+        # Clear the 'config.vdf' and remove any tool mappings, emulating
+        # a situation in which the user has only installed games but hasn't
+        # touched any Steam Play settings
+        steam_config_path.write_text(
+            vdf.dumps({
+                "InstallConfigStore": {
+                    "Software": {
+                        "Valve": {
+                            "Steam": {}
+                        }
+                    }
+                }
+            })
+        )
+
+        proton_app = find_proton_app(
+            steam_path=steam_dir,
+            steam_apps=[],
+            appid=10
+        )
+
+        assert proton_app is None
+        assert any(
+            "Active Proton installation could not be found automatically."
+            in r.message for r in caplog.records
+        )
+
+    def test_find_proton_app_not_proton(
+            self, steam_app_factory, steam_dir, default_proton,
+            steam_config_path, caplog):
+        """
+        Check that find_proton_app returns None when find_steam_compat_tool_app
+        returns an app that is not a Proton installation
+        """
+        steam_app = steam_app_factory(
+            name="Fake game", appid=10,
+            compat_tool_name="Fake game"
+        )
+        # Set Fake game as the game specific Proton
+        steam_config_path.write_text(
+            vdf.dumps({
+                "InstallConfigStore": {
+                    "Software": {
+                        "Valve": {
+                            "Steam": {
+                                "ToolMapping": {
+                                    "10": {
+                                        "name": "Fake game"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            })
+        )
+
+        proton_app = find_proton_app(
+            steam_path=steam_dir,
+            steam_apps=[steam_app],
+            appid=10
+        )
+
+        assert proton_app is None
+        assert any(
+            "Active compatibility tool was found, but it's not a Proton installation supported by Protontricks."
+            in r.message for r in caplog.records
+        )
 
 
 class TestFindSteamCompatToolApp:
