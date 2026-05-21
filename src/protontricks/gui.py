@@ -10,6 +10,8 @@ import sys
 from pathlib import Path
 from subprocess import PIPE, CalledProcessError, run
 
+from dataclasses import dataclass
+
 from PIL import Image
 
 from .config import get_config
@@ -20,8 +22,17 @@ from .util import get_cache_dir
 APP_ICON_SIZE = (32, 32)
 
 
+@dataclass
+class DialogOptions:
+    cancel_label: str = "Cancel"
+    add_cancel_button: bool = False
+    ok_label: str = "OK"
+    width: int = 600
+    height: int = 600
+
+
 __all__ = (
-    "LocaleError", "get_gui_provider", "select_steam_app_with_gui",
+    "DialogOptions", "LocaleError", "get_gui_provider", "select_steam_app_with_gui",
     "select_steam_installation", "show_text_dialog", "prompt_filesystem_access"
 )
 
@@ -155,44 +166,40 @@ def _run_gui(args, input_=None, strip_nonascii=False):
 
         raise
 
+
 def show_text_dialog(
         title,
         text,
         window_icon,
-        cancel_label=None,
-        add_cancel_button=False,
-        ok_label=None,
-        width=600,
-        height=600):
+        options=None):
     """
     Show a text dialog to the user
 
     :returns: True if user clicked OK, False otherwise
     """
-    if not ok_label:
-        ok_label = "OK"
-
-    if not cancel_label:
-        cancel_label = "Cancel"
+    if options is None:
+        options = DialogOptions()
 
     def _get_yad_args():
         args = [
             "yad", "--text-info", "--window-icon", window_icon,
-            "--title", title, "--width", str(width), "--height", str(height),
-            f"--button={ok_label}:0", "--wrap",
+            "--title", title, "--width", str(options.width),
+            "--height", str(options.height),
+            f"--button={options.ok_label}:0", "--wrap",
             "--margins", "2", "--center"
         ]
 
-        if add_cancel_button:
-            args += [f"--button={cancel_label}:1"]
+        if options.add_cancel_button:
+            args += [f"--button={options.cancel_label}:1"]
 
         return args
 
     def _get_zenity_args():
         args = [
             "zenity", "--text-info", "--window-icon", window_icon,
-            "--title", title, "--width", str(width), "--height",
-            str(height), "--cancel-label", cancel_label, "--ok-label", ok_label
+            "--title", title, "--width", str(options.width), "--height",
+            str(options.height), "--cancel-label", options.cancel_label,
+            "--ok-label", options.ok_label
         ]
 
         return args
@@ -474,9 +481,11 @@ def prompt_filesystem_access(paths, show_dialog=False):
             title="Protontricks",
             text=message,
             window_icon="wine",
-            cancel_label="Close",
-            ok_label="Ignore, don't ask again",
-            add_cancel_button=True
+            options=DialogOptions(
+                cancel_label="Close",
+                ok_label="Ignore, don't ask again",
+                add_cancel_button=True
+            )
         )
 
         if ignore:
