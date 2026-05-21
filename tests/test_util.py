@@ -399,3 +399,34 @@ class TestIsSteamOSOrDeck:
     @pytest.mark.usefixtures("steam_deck")
     def test_is_steamos(self):
         assert is_steamos()
+
+class TestGetLegacyRuntimeLibraryPaths:
+    def test_get_legacy_runtime_library_paths(self, default_proton, monkeypatch):
+        """
+        Test that legacy Steam Runtime library paths are retrieved and formatted correctly
+        """
+        import os
+        from protontricks.util import get_legacy_runtime_library_paths
+
+        def mock_check_output(args):
+            assert args == [
+                str(Path("/path/to/steam_runtime/run.sh")),
+                "--print-steam-runtime-library-paths"
+            ]
+            return b"/path/to/steam_runtime_lib1:/path/to/steam_runtime_lib2"
+
+        monkeypatch.setattr("protontricks.util.check_output", mock_check_output)
+
+        legacy_steam_runtime_path = Path("/path/to/steam_runtime")
+
+        result = get_legacy_runtime_library_paths(
+            legacy_steam_runtime_path, default_proton
+        )
+
+        expected = "".join([
+            str(default_proton.proton_dist_path / "lib"), os.pathsep,
+            str(default_proton.proton_dist_path / "lib64"), os.pathsep,
+            "/path/to/steam_runtime_lib1:/path/to/steam_runtime_lib2"
+        ])
+
+        assert result == expected
