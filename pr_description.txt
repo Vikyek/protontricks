@@ -1,0 +1,4 @@
+🎯 **What:** Resolved the "Too many arguments" code health warning from pylint for `binary_loads` and `binary_load` functions in `src/protontricks/_vdf/__init__.py`.
+💡 **Why:** Silences an unnecessary linter warning on an externally vendored module's public API without introducing breaking changes to any external or internal caller relying on positional arguments, and improves signature readability by conforming to PEP8 multi-line wrapping.
+✅ **Verification:** Verified by running the test suite (`pytest tests/`) to ensure no functionality is broken, and manually checked the `pylint` output to confirm the `too-many-arguments` and `too-many-positional-arguments` warnings are no longer reported.
+✨ **Result:** A cleaner pylint report (score 7.64) while completely preserving the backward compatibility and function behavior.
