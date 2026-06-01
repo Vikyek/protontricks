@@ -91,8 +91,8 @@ def _get_appid2icon(steam_apps):
 
                     resize_icon = img.size != APP_ICON_SIZE
 
-                    # Resize icons that have a non-standard size to ensure
-                    # they can be displayed consistently in the app selector
+                    # Resize icons that have a non-standard size to ensure they can
+                    # be displayed consistently in the app selector
                     if resize_icon:
                         logger.info(
                             "App icon %s has unusual size, resizing",
@@ -154,7 +154,6 @@ def _run_gui(args, input_=None, strip_nonascii=False):
             return _run_gui(args, strip_nonascii=True)
 
         raise
-
 
 def show_text_dialog(
         title,
@@ -297,51 +296,6 @@ def select_steam_installation(steam_installations):
     return steam_installations[choice]
 
 
-def _get_yad_app_selection(title, steam_apps):
-    args = [
-        "yad", "--list", "--no-headers", "--center",
-        "--window-icon", "wine",
-        # Disabling markup means we won't have to escape special characters
-        "--no-markup",
-        "--search-column", "2",
-        "--print-column", "2",
-        "--width", "600", "--height", "400",
-        "--text", title,
-        "--title", "Protontricks",
-        "--column", "Icon:IMG",
-        "--column", "Steam app"
-    ]
-    # YAD implementation has icons for app selection
-    appid2icon = _get_appid2icon(steam_apps)
-
-    cmd_input = [
-        [
-            str(appid2icon[app.appid]),
-            f"{app.name}: {app.appid}"
-        ]
-        for app in steam_apps if app.is_windows_app
-    ]
-    # Flatten the list
-    cmd_input = list(itertools.chain.from_iterable(cmd_input))
-    return args, cmd_input
-
-
-def _get_zenity_app_selection(title, steam_apps):
-    args = [
-        "zenity", "--list", "--hide-header",
-        "--width", "600",
-        "--height", "400",
-        "--text", title,
-        "--title", "Protontricks",
-        "--column", "Steam app"
-    ]
-    cmd_input = [
-        f'{app.name}: {app.appid}' for app in steam_apps
-        if app.is_windows_app
-    ]
-    return args, cmd_input
-
-
 def select_steam_app_with_gui(steam_apps, steam_path, title=None):
     """
     Prompt the user to select a Proton-enabled Steam app from
@@ -349,15 +303,57 @@ def select_steam_app_with_gui(steam_apps, steam_path, title=None):
 
     Return the selected SteamApp
     """
+    def _get_yad_args():
+        return [
+            "yad", "--list", "--no-headers", "--center",
+            "--window-icon", "wine",
+            # Disabling markup means we won't have to escape special characters
+            "--no-markup",
+            "--search-column", "2",
+            "--print-column", "2",
+            "--width", "600", "--height", "400",
+            "--text", title,
+            "--title", "Protontricks",
+            "--column", "Icon:IMG",
+            "--column", "Steam app"
+        ]
+
+    def _get_zenity_args():
+        return [
+            "zenity", "--list", "--hide-header",
+            "--width", "600",
+            "--height", "400",
+            "--text", title,
+            "--title", "Protontricks",
+            "--column", "Steam app"
+        ]
+
     if not title:
         title = "Select Steam app"
 
     gui_provider = get_gui_provider()
 
     if gui_provider == "yad":
-        args, cmd_input = _get_yad_app_selection(title, steam_apps)
+        args = _get_yad_args()
+
+        # YAD implementation has icons for app selection
+        appid2icon = _get_appid2icon(steam_apps)
+
+        cmd_input = [
+            [
+                str(appid2icon[app.appid]),
+                f"{app.name}: {app.appid}"
+            ]
+            for app in steam_apps if app.is_windows_app
+        ]
+        # Flatten the list
+        cmd_input = list(itertools.chain.from_iterable(cmd_input))
     else:
-        args, cmd_input = _get_zenity_app_selection(title, steam_apps)
+        args = _get_zenity_args()
+        cmd_input = [
+            f'{app.name}: {app.appid}' for app in steam_apps
+            if app.is_windows_app
+        ]
 
     cmd_input = "\n".join(cmd_input)
 

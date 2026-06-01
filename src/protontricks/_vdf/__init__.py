@@ -94,35 +94,7 @@ def parse(fp, mapper=dict, merge_duplicate_keys=True, escaped=True):
                              r'))?',
                              flags=re.I)
 
-    for lineno, line in enumerate(fp, 1):
-        if lineno == 1:
-            line = strip_bom(line)
-
-        line = line.lstrip()
-
-        # skip empty and comment lines
-        if line == "" or line[0] == '/':
-            continue
-
-        # one level deeper
-        if line[0] == "{":
-            expect_bracket = False
-            continue
-
-        if expect_bracket:
-            raise SyntaxError("vdf.parse: expected openning bracket",
-                              (getattr(fp, 'name', '<%s>' % fp.__class__.__name__), lineno, 1, line))
-
-        # one level back
-        if line[0] == "}":
-            if len(stack) > 1:
-                stack.pop()
-                continue
-
-            raise SyntaxError("vdf.parse: one too many closing parenthasis",
-                              (getattr(fp, 'name', '<%s>' % fp.__class__.__name__), lineno, 0, line))
-
-        # parse keyvalue pairs
+    def _parse_keyvalue(line, lineno, current_expect_bracket):
         while True:
             match = re_keyvalue.match(line)
 
@@ -161,7 +133,7 @@ def parse(fp, mapper=dict, merge_duplicate_keys=True, escaped=True):
                     # only expect a bracket if it's not already closed or on the same line
                     stack.append(_m)
                     if match.group('sblock') is None:
-                        expect_bracket = True
+                        current_expect_bracket = True
 
             # we've matched a simple keyvalue pair, map it to the last dict obj in the stack
             else:
@@ -179,6 +151,39 @@ def parse(fp, mapper=dict, merge_duplicate_keys=True, escaped=True):
 
             # exit the loop
             break
+
+        return current_expect_bracket
+
+    for lineno, line in enumerate(fp, 1):
+        if lineno == 1:
+            line = strip_bom(line)
+
+        line = line.lstrip()
+
+        # skip empty and comment lines
+        if line == "" or line[0] == '/':
+            continue
+
+        # one level deeper
+        if line[0] == "{":
+            expect_bracket = False
+            continue
+
+        if expect_bracket:
+            raise SyntaxError("vdf.parse: expected openning bracket",
+                              (getattr(fp, 'name', '<%s>' % fp.__class__.__name__), lineno, 1, line))
+
+        # one level back
+        if line[0] == "}":
+            if len(stack) > 1:
+                stack.pop()
+                continue
+
+            raise SyntaxError("vdf.parse: one too many closing parenthasis",
+                              (getattr(fp, 'name', '<%s>' % fp.__class__.__name__), lineno, 0, line))
+
+        # parse keyvalue pairs
+        expect_bracket = _parse_keyvalue(line, lineno, expect_bracket)
 
     if len(stack) != 1:
         raise SyntaxError("vdf.parse: unclosed parenthasis or quotes (EOF)",
@@ -295,10 +300,7 @@ BIN_END         = b'\x08'
 BIN_INT64       = b'\x0A'
 BIN_END_ALT     = b'\x0B'
 
-def binary_loads(
-    b, mapper=dict, merge_duplicate_keys=True,
-    alt_format=False, key_table=None, raise_on_remaining=True
-):  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=True):
     """
     Deserialize ``b`` (``bytes`` containing a VDF in "binary form")
     to a Python object.
@@ -321,10 +323,7 @@ def binary_loads(
 
     return binary_load(BytesIO(b), mapper, merge_duplicate_keys, alt_format, key_table, raise_on_remaining)
 
-def binary_load(
-    fp, mapper=dict, merge_duplicate_keys=True,
-    alt_format=False, key_table=None, raise_on_remaining=False
-):  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=False):
     """
     Deserialize ``fp`` (a ``.read()``-supporting file-like object containing
     binary VDF) to a Python object.
