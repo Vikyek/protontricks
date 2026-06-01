@@ -713,97 +713,28 @@ def get_tool_appid(compat_tool_name, steam_play_manifest):
     return None
 
 
-def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
-    """
-    Get the current compatibility tool used by Steam and
-    return a SteamApp object
+def _get_tool_app(compat_tool_name, steam_apps, steam_play_manifest):
+    tool_appid = get_tool_appid(compat_tool_name, steam_play_manifest)
 
-    If 'appid' is provided, try to find the app-specific compatibility tool
-    if one is configured
-
-    The compatibility tool *may* not be a Proton installation. This can be
-    checked using `SteamApp.is_proton`.
-    """
-    def _get_tool_app(compat_tool_name, steam_apps, steam_play_manifest):
-        tool_appid = get_tool_appid(compat_tool_name, steam_play_manifest)
-
-        if not tool_appid:
-            return None
-
-        try:
-            app = next(
-                app for app in steam_apps if app.appid == tool_appid
-            )
-            return app
-        except StopIteration:
-            return None
-
-    logger.debug("Finding Steam compat tool name for appid %s", appid)
-
-    # Determine which Proton version to use (either globally or for
-    # a specific app if `appid` was provided) by checking
-    # `<steam_dir>/config/config.vdf` and `<steam_dir>/appcache/appinfo.vdf`.
-    # Multiple configuration values might be found. In such case, select the
-    # one with the highest priority.
-    config_vdf_path = steam_path / "config" / "config.vdf"
-    # config.vdf might contain invalid UTF-8 characters in the
-    # `SDL_GamepadBind` field. We don't use that in any way, so we can deal
-    # with the invalid characters by just ignoring them.
-    content = config_vdf_path.read_text(errors="replace")
-
-    vdf_data = lower_dict(vdf.loads(content))
-
-    appinfo_path = steam_path / "appcache" / "appinfo.vdf"
-    appinfo_sections = [
-        section for section in iter_appinfo_sections(appinfo_path)
-        if section["appinfo"]["appid"] in (STEAM_PLAY_MANIFESTS_APPID, appid)
-    ]
-    steam_play_manifest = next(
-        section for section in appinfo_sections
-        if section["appinfo"]["appid"] == STEAM_PLAY_MANIFESTS_APPID
-    )
+    if not tool_appid:
+        return None
 
     try:
-        app_section = next(
-            section for section in appinfo_sections
-            if section["appinfo"]["appid"] == appid
+        app = next(
+            app for app in steam_apps if app.appid == tool_appid
         )
+        return app
     except StopIteration:
-        # App ID was most likely not provided
-        app_section = None
+        return None
 
-    try:
-        manifest_app_compat_section = next(
-            entry for mapping_appid, entry in
-            steam_play_manifest["appinfo"]["extended"]["app_mappings"].items()
-            if int(mapping_appid) == appid
-        )
-    except StopIteration:
-        # App doesn't have a default compatibility tool mapping
-        manifest_app_compat_section = None
 
-    # ToolMapping seems to be used in older Steam beta releases
-    try:
-        tool_mapping = (
-            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
-                    ["toolmapping"]
-        )
-        logger.debug("Found ToolMapping entry")
-    except KeyError:
-        tool_mapping = {}
-
-    # CompatToolMapping seems to be the name used in newer Steam releases
-    # We'll prioritize this if it exists
-    try:
-        compat_tool_mapping = (
-            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
-                    ["compattoolmapping"]
-        )
-        logger.debug("Found CompatToolMapping entry")
-    except KeyError:
-        compat_tool_mapping = {}
-
-    # The name of potential names in order of priority
+def _get_potential_compat_tool_names(
+    appid, compat_tool_mapping, app_section,
+    manifest_app_compat_section, tool_mapping
+):
+    """
+    Get a list of potential compatibility tool names in order of priority.
+    """
     potential_names = []
 
     # Game specific user settings have the 1st priority, if they exist
@@ -875,6 +806,90 @@ def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
             tool_name
         )
         potential_names.append(tool_name)
+
+    return potential_names
+
+
+def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
+    """
+    Get the current compatibility tool used by Steam and
+    return a SteamApp object
+
+    If 'appid' is provided, try to find the app-specific compatibility tool
+    if one is configured
+
+    The compatibility tool *may* not be a Proton installation. This can be
+    checked using `SteamApp.is_proton`.
+    """
+    logger.debug("Finding Steam compat tool name for appid %s", appid)
+
+    # Determine which Proton version to use (either globally or for
+    # a specific app if `appid` was provided) by checking
+    # `<steam_dir>/config/config.vdf` and `<steam_dir>/appcache/appinfo.vdf`.
+    # Multiple configuration values might be found. In such case, select the
+    # one with the highest priority.
+    config_vdf_path = steam_path / "config" / "config.vdf"
+    # config.vdf might contain invalid UTF-8 characters in the
+    # `SDL_GamepadBind` field. We don't use that in any way, so we can deal
+    # with the invalid characters by just ignoring them.
+    content = config_vdf_path.read_text(errors="replace")
+
+    vdf_data = lower_dict(vdf.loads(content))
+
+    appinfo_path = steam_path / "appcache" / "appinfo.vdf"
+    appinfo_sections = [
+        section for section in iter_appinfo_sections(appinfo_path)
+        if section["appinfo"]["appid"] in (STEAM_PLAY_MANIFESTS_APPID, appid)
+    ]
+    steam_play_manifest = next(
+        section for section in appinfo_sections
+        if section["appinfo"]["appid"] == STEAM_PLAY_MANIFESTS_APPID
+    )
+
+    try:
+        app_section = next(
+            section for section in appinfo_sections
+            if section["appinfo"]["appid"] == appid
+        )
+    except StopIteration:
+        # App ID was most likely not provided
+        app_section = None
+
+    try:
+        manifest_app_compat_section = next(
+            entry for mapping_appid, entry in
+            steam_play_manifest["appinfo"]["extended"]["app_mappings"].items()
+            if int(mapping_appid) == appid
+        )
+    except StopIteration:
+        # App doesn't have a default compatibility tool mapping
+        manifest_app_compat_section = None
+
+    # ToolMapping seems to be used in older Steam beta releases
+    try:
+        tool_mapping = (
+            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
+                    ["toolmapping"]
+        )
+        logger.debug("Found ToolMapping entry")
+    except KeyError:
+        tool_mapping = {}
+
+    # CompatToolMapping seems to be the name used in newer Steam releases
+    # We'll prioritize this if it exists
+    try:
+        compat_tool_mapping = (
+            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
+                    ["compattoolmapping"]
+        )
+        logger.debug("Found CompatToolMapping entry")
+    except KeyError:
+        compat_tool_mapping = {}
+
+    potential_names = _get_potential_compat_tool_names(
+        appid, compat_tool_mapping, app_section,
+        manifest_app_compat_section, tool_mapping
+    )
 
     # Get the first name that was valid,
     # or use experimental or stable Proton as fallback
