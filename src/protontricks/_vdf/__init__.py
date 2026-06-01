@@ -304,7 +304,10 @@ BIN_END         = b'\x08'
 BIN_INT64       = b'\x0A'
 BIN_END_ALT     = b'\x0B'
 
-def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=True):
+def binary_loads(
+    b, mapper=dict, merge_duplicate_keys=True,
+    alt_format=False, key_table=None, raise_on_remaining=True
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     """
     Deserialize ``b`` (``bytes`` containing a VDF in "binary form")
     to a Python object.
@@ -327,7 +330,10 @@ def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
 
     return binary_load(BytesIO(b), mapper, merge_duplicate_keys, alt_format, key_table, raise_on_remaining)
 
-def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=False):
+def binary_load(
+    fp, mapper=dict, merge_duplicate_keys=True,
+    alt_format=False, key_table=None, raise_on_remaining=False
+):  # pylint: disable=too-many-arguments,too-many-positional-arguments
     """
     Deserialize ``fp`` (a ``.read()``-supporting file-like object containing
     binary VDF) to a Python object.

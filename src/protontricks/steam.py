@@ -66,8 +66,9 @@ class SteamApp(object):
         "last_updated", "required_tool_appid", "required_tool_app"
     )
 
+    # pylint: disable=too-many-arguments
     def __init__(
-            self, name, install_path, icon_path=None, prefix_path=None,
+            self, name, install_path, *, icon_path=None, prefix_path=None,
             appid=None, last_updated=None, required_tool_appid=None):
         """
         :appid: App's appid
@@ -551,102 +552,104 @@ APPINFO_V28_STRUCT_SECTION = "<LLLLQ20sL20s"
 APPINFO_V29_STRUCT_SECTION = "<LLLLQ20sL20s"
 
 
+def _iter_v28_appinfo(data, start):
+    """
+    Parse and iterate appinfo.vdf version 28.
+    Identical to version 27 except for new VDF SHA1 field.
+    """
+    i = start
+    section_size = struct.calcsize(APPINFO_V28_STRUCT_SECTION)
+    while True:
+        # We don't need any of the fields besides 'entry_size',
+        # which is used to determine the length of the variable-length VDF
+        # field.
+        # Still, here they are for posterity's sake.
+        (appid, entry_size, infostate, last_updated, access_token,
+         sha_hash, change_number, vdf_sha_hash) = struct.unpack(
+            APPINFO_V28_STRUCT_SECTION, data[i:i+section_size])
+        vdf_section_size = entry_size - (section_size - 8)
+
+        i += section_size
+
+        vdf_d = vdf.binary_loads(data[i:i+vdf_section_size])
+        vdf_d = lower_dict(vdf_d)
+        yield vdf_d
+
+        i += vdf_section_size
+
+        if i == len(data) - 4:
+            return
+
+
+def _iter_v29_appinfo(data, start):
+    """
+    Parse and iterate appinfo.vdf version 29.
+    """
+    i = start
+
+    # The header contains the offset to the key table
+    key_table_offset = struct.unpack("<q", data[i:i+8])[0]
+    key_table = []
+
+    key_count = struct.unpack(
+        "<i", data[key_table_offset:key_table_offset+4]
+    )[0]
+
+    table_i = key_table_offset + 4
+    for _ in range(0, key_count):
+        key = bytearray()
+        while True:
+            key.append(data[table_i])
+            table_i += 1
+
+            if key[-1] == 0:
+                key_table.append(
+                    key[0:-1].decode("utf-8", errors="replace")
+                )
+                break
+
+    i += 8
+
+    section_size = struct.calcsize(APPINFO_V29_STRUCT_SECTION)
+    while True:
+        # We don't need any of the fields besides 'entry_size',
+        # which is used to determine the length of the variable-length VDF
+        # field.
+        # Still, here they are for posterity's sake.
+        (appid, entry_size, infostate, last_updated, access_token,
+         sha_hash, change_number, vdf_sha_hash) = struct.unpack(
+            APPINFO_V29_STRUCT_SECTION, data[i:i+section_size])
+        vdf_section_size = entry_size - (section_size - 8)
+
+        i += section_size
+
+        try:
+            vdf_d = vdf.binary_loads(
+                data[i:i+vdf_section_size], key_table=key_table
+            )
+        except TypeError:
+            # System 'vdf' is too old and does not support 'key_table',
+            # use the bundled one instead. This is cursed, but it's
+            # so far the only reasonable option without a proper maintained
+            # release on PyPI.
+            vdf_d = vendored_binary_loads(
+                data[i:i+vdf_section_size], key_table=key_table
+            )
+
+        vdf_d = lower_dict(vdf_d)
+        yield vdf_d
+
+        i += vdf_section_size
+
+        if i == key_table_offset - 4:
+            return
+
+
 def iter_appinfo_sections(path):
     """
     Parse an appinfo.vdf file and iterate through all the binary VDF objects
     inside it
     """
-    def _iter_v28_appinfo(data, start):
-        """
-        Parse and iterate appinfo.vdf version 28.
-        Identical to version 27 except for new VDF SHA1 field.
-        """
-        i = start
-        section_size = struct.calcsize(APPINFO_V28_STRUCT_SECTION)
-        while True:
-            # We don't need any of the fields besides 'entry_size',
-            # which is used to determine the length of the variable-length VDF
-            # field.
-            # Still, here they are for posterity's sake.
-            (appid, entry_size, infostate, last_updated, access_token,
-             sha_hash, change_number, vdf_sha_hash) = struct.unpack(
-                APPINFO_V28_STRUCT_SECTION, data[i:i+section_size])
-            vdf_section_size = entry_size - (section_size - 8)
-
-            i += section_size
-
-            vdf_d = vdf.binary_loads(data[i:i+vdf_section_size])
-            vdf_d = lower_dict(vdf_d)
-            yield vdf_d
-
-            i += vdf_section_size
-
-            if i == len(data) - 4:
-                return
-
-    def _iter_v29_appinfo(data, start):
-        """
-        Parse and iterate appinfo.vdf version 29.
-        """
-        i = start
-
-        # The header contains the offset to the key table
-        key_table_offset = struct.unpack("<q", data[i:i+8])[0]
-        key_table = []
-
-        key_count = struct.unpack(
-            "<i", data[key_table_offset:key_table_offset+4]
-        )[0]
-
-        table_i = key_table_offset + 4
-        for _ in range(0, key_count):
-            key = bytearray()
-            while True:
-                key.append(data[table_i])
-                table_i += 1
-
-                if key[-1] == 0:
-                    key_table.append(
-                        key[0:-1].decode("utf-8", errors="replace")
-                    )
-                    break
-
-        i += 8
-
-        section_size = struct.calcsize(APPINFO_V29_STRUCT_SECTION)
-        while True:
-            # We don't need any of the fields besides 'entry_size',
-            # which is used to determine the length of the variable-length VDF
-            # field.
-            # Still, here they are for posterity's sake.
-            (appid, entry_size, infostate, last_updated, access_token,
-             sha_hash, change_number, vdf_sha_hash) = struct.unpack(
-                APPINFO_V29_STRUCT_SECTION, data[i:i+section_size])
-            vdf_section_size = entry_size - (section_size - 8)
-
-            i += section_size
-
-            try:
-                vdf_d = vdf.binary_loads(
-                    data[i:i+vdf_section_size], key_table=key_table
-                )
-            except TypeError:
-                # System 'vdf' is too old and does not support 'key_table',
-                # use the bundled one instead. This is cursed, but it's
-                # so far the only reasonable option without a proper maintained
-                # release on PyPI.
-                vdf_d = vendored_binary_loads(
-                    data[i:i+vdf_section_size], key_table=key_table
-                )
-
-            vdf_d = lower_dict(vdf_d)
-            yield vdf_d
-
-            i += vdf_section_size
-
-            if i == key_table_offset - 4:
-                return
-
     logger.debug("Loading appinfo.vdf in %s", path)
 
     # appinfo.vdf is not actually a (binary) VDF file, but a binary file
@@ -711,97 +714,28 @@ def get_tool_appid(compat_tool_name, steam_play_manifest):
     return None
 
 
-def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
-    """
-    Get the current compatibility tool used by Steam and
-    return a SteamApp object
+def _get_tool_app(compat_tool_name, steam_apps, steam_play_manifest):
+    tool_appid = get_tool_appid(compat_tool_name, steam_play_manifest)
 
-    If 'appid' is provided, try to find the app-specific compatibility tool
-    if one is configured
-
-    The compatibility tool *may* not be a Proton installation. This can be
-    checked using `SteamApp.is_proton`.
-    """
-    def _get_tool_app(compat_tool_name, steam_apps, steam_play_manifest):
-        tool_appid = get_tool_appid(compat_tool_name, steam_play_manifest)
-
-        if not tool_appid:
-            return None
-
-        try:
-            app = next(
-                app for app in steam_apps if app.appid == tool_appid
-            )
-            return app
-        except StopIteration:
-            return None
-
-    logger.debug("Finding Steam compat tool name for appid %s", appid)
-
-    # Determine which Proton version to use (either globally or for
-    # a specific app if `appid` was provided) by checking
-    # `<steam_dir>/config/config.vdf` and `<steam_dir>/appcache/appinfo.vdf`.
-    # Multiple configuration values might be found. In such case, select the
-    # one with the highest priority.
-    config_vdf_path = steam_path / "config" / "config.vdf"
-    # config.vdf might contain invalid UTF-8 characters in the
-    # `SDL_GamepadBind` field. We don't use that in any way, so we can deal
-    # with the invalid characters by just ignoring them.
-    content = config_vdf_path.read_text(errors="replace")
-
-    vdf_data = lower_dict(vdf.loads(content))
-
-    appinfo_path = steam_path / "appcache" / "appinfo.vdf"
-    appinfo_sections = [
-        section for section in iter_appinfo_sections(appinfo_path)
-        if section["appinfo"]["appid"] in (STEAM_PLAY_MANIFESTS_APPID, appid)
-    ]
-    steam_play_manifest = next(
-        section for section in appinfo_sections
-        if section["appinfo"]["appid"] == STEAM_PLAY_MANIFESTS_APPID
-    )
+    if not tool_appid:
+        return None
 
     try:
-        app_section = next(
-            section for section in appinfo_sections
-            if section["appinfo"]["appid"] == appid
+        app = next(
+            app for app in steam_apps if app.appid == tool_appid
         )
+        return app
     except StopIteration:
-        # App ID was most likely not provided
-        app_section = None
+        return None
 
-    try:
-        manifest_app_compat_section = next(
-            entry for mapping_appid, entry in
-            steam_play_manifest["appinfo"]["extended"]["app_mappings"].items()
-            if int(mapping_appid) == appid
-        )
-    except StopIteration:
-        # App doesn't have a default compatibility tool mapping
-        manifest_app_compat_section = None
 
-    # ToolMapping seems to be used in older Steam beta releases
-    try:
-        tool_mapping = (
-            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
-                    ["toolmapping"]
-        )
-        logger.debug("Found ToolMapping entry")
-    except KeyError:
-        tool_mapping = {}
-
-    # CompatToolMapping seems to be the name used in newer Steam releases
-    # We'll prioritize this if it exists
-    try:
-        compat_tool_mapping = (
-            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
-                    ["compattoolmapping"]
-        )
-        logger.debug("Found CompatToolMapping entry")
-    except KeyError:
-        compat_tool_mapping = {}
-
-    # The name of potential names in order of priority
+def _get_potential_compat_tool_names(
+    appid, compat_tool_mapping, app_section,
+    manifest_app_compat_section, tool_mapping
+):
+    """
+    Get a list of potential compatibility tool names in order of priority.
+    """
     potential_names = []
 
     # Game specific user settings have the 1st priority, if they exist
@@ -873,6 +807,90 @@ def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
             tool_name
         )
         potential_names.append(tool_name)
+
+    return potential_names
+
+
+def find_steam_compat_tool_app(steam_path, steam_apps, appid=None):
+    """
+    Get the current compatibility tool used by Steam and
+    return a SteamApp object
+
+    If 'appid' is provided, try to find the app-specific compatibility tool
+    if one is configured
+
+    The compatibility tool *may* not be a Proton installation. This can be
+    checked using `SteamApp.is_proton`.
+    """
+    logger.debug("Finding Steam compat tool name for appid %s", appid)
+
+    # Determine which Proton version to use (either globally or for
+    # a specific app if `appid` was provided) by checking
+    # `<steam_dir>/config/config.vdf` and `<steam_dir>/appcache/appinfo.vdf`.
+    # Multiple configuration values might be found. In such case, select the
+    # one with the highest priority.
+    config_vdf_path = steam_path / "config" / "config.vdf"
+    # config.vdf might contain invalid UTF-8 characters in the
+    # `SDL_GamepadBind` field. We don't use that in any way, so we can deal
+    # with the invalid characters by just ignoring them.
+    content = config_vdf_path.read_text(errors="replace")
+
+    vdf_data = lower_dict(vdf.loads(content))
+
+    appinfo_path = steam_path / "appcache" / "appinfo.vdf"
+    appinfo_sections = [
+        section for section in iter_appinfo_sections(appinfo_path)
+        if section["appinfo"]["appid"] in (STEAM_PLAY_MANIFESTS_APPID, appid)
+    ]
+    steam_play_manifest = next(
+        section for section in appinfo_sections
+        if section["appinfo"]["appid"] == STEAM_PLAY_MANIFESTS_APPID
+    )
+
+    try:
+        app_section = next(
+            section for section in appinfo_sections
+            if section["appinfo"]["appid"] == appid
+        )
+    except StopIteration:
+        # App ID was most likely not provided
+        app_section = None
+
+    try:
+        manifest_app_compat_section = next(
+            entry for mapping_appid, entry in
+            steam_play_manifest["appinfo"]["extended"]["app_mappings"].items()
+            if int(mapping_appid) == appid
+        )
+    except StopIteration:
+        # App doesn't have a default compatibility tool mapping
+        manifest_app_compat_section = None
+
+    # ToolMapping seems to be used in older Steam beta releases
+    try:
+        tool_mapping = (
+            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
+                    ["toolmapping"]
+        )
+        logger.debug("Found ToolMapping entry")
+    except KeyError:
+        tool_mapping = {}
+
+    # CompatToolMapping seems to be the name used in newer Steam releases
+    # We'll prioritize this if it exists
+    try:
+        compat_tool_mapping = (
+            vdf_data["installconfigstore"]["software"]["valve"]["steam"]
+                    ["compattoolmapping"]
+        )
+        logger.debug("Found CompatToolMapping entry")
+    except KeyError:
+        compat_tool_mapping = {}
+
+    potential_names = _get_potential_compat_tool_names(
+        appid, compat_tool_mapping, app_section,
+        manifest_app_compat_section, tool_mapping
+    )
 
     # Get the first name that was valid,
     # or use experimental or stable Proton as fallback
@@ -1404,6 +1422,72 @@ def get_appid_from_shortcut(target, name):
     return result >> 32
 
 
+def _create_shortcut_steam_app(shortcut_data, steam_lib_paths):
+    """
+    Create a SteamApp object from a single custom shortcut's data
+    """
+    if "appid" in shortcut_data:
+        try:
+            appid = shortcut_data["appid"] & 0xffffffff
+        except TypeError:
+            logger.info(
+                "Skipping unrecognized non-Steam shortcut with app ID "
+                "'%s'",
+                shortcut_data["appid"]
+            )
+            return None
+    else:
+        appid = get_appid_from_shortcut(
+            target=shortcut_data["exe"], name=shortcut_data["appname"]
+        )
+
+    prefix_path = find_appid_proton_prefix(
+        appid=appid, steam_lib_paths=steam_lib_paths
+    )
+    if not prefix_path:
+        logger.info(
+            "Shortcut %s (%s) does not have a prefix. "
+            "It's either not a Proton app or it hasn't been launched yet.",
+            shortcut_data["appname"], appid
+        )
+        return None
+
+    install_path = Path(shortcut_data["startdir"].strip('"'))
+
+    try:
+        # Check that we have permission to access the installation
+        # directory, whether it exists or not. Any attempts to check
+        # any files will fail later if this isn't done.
+        install_path.is_dir()
+
+        if not prefix_path.is_dir():
+            return None
+    except PermissionError as exc:
+        logger.warning(
+            "Skipping shortcut %s due to insufficient permissions. "
+            "Error: %s",
+            shortcut_data["appname"], str(exc)
+        )
+        return None
+
+    icon_path = None
+
+    if shortcut_data.get("icon", None):
+        icon_path = Path(shortcut_data["icon"])
+
+    logger.debug(
+        "Creating SteamApp from non-Steam shortcut in %s", install_path
+    )
+
+    return SteamApp(
+        appid=appid,
+        name=f"Non-Steam shortcut: {shortcut_data['appname']}",
+        prefix_path=prefix_path,
+        install_path=install_path,
+        icon_path=icon_path
+    )
+
+
 def get_custom_windows_shortcuts(steam_path, steam_lib_paths):
     """
     Get a list of custom shortcuts for Windows applications as a list
@@ -1436,69 +1520,11 @@ def get_custom_windows_shortcuts(steam_path, steam_lib_paths):
         shortcut_data = lower_dict(shortcut_data)
         shortcut_id = int(shortcut_id)
 
-        if "appid" in shortcut_data:
-            try:
-                appid = shortcut_data["appid"] & 0xffffffff
-            except TypeError:
-                logger.info(
-                    "Skipping unrecognized non-Steam shortcut with app ID "
-                    "'%s'",
-                    shortcut_data["appid"]
-                )
-                continue
-        else:
-            appid = get_appid_from_shortcut(
-                target=shortcut_data["exe"], name=shortcut_data["appname"]
-            )
-
-        prefix_path = find_appid_proton_prefix(
-            appid=appid, steam_lib_paths=steam_lib_paths
+        app = _create_shortcut_steam_app(
+            shortcut_data=shortcut_data, steam_lib_paths=steam_lib_paths
         )
-        if not prefix_path:
-            logger.info(
-                "Shortcut %s (%s) does not have a prefix. "
-                "It's either not a Proton app or it hasn't been launched yet.",
-                shortcut_data["appname"], appid
-            )
-            continue
-
-        install_path = Path(shortcut_data["startdir"].strip('"'))
-
-        try:
-            # Check that we have permission to access the installation
-            # directory, whether it exists or not. Any attempts to check
-            # any files will fail later if this isn't done.
-            install_path.is_dir()
-
-            if not prefix_path.is_dir():
-                continue
-        except PermissionError as exc:
-            logger.warning(
-                "Skipping shortcut %s due to insufficient permissions. "
-                "Error: %s",
-                shortcut_data["appname"], str(exc)
-            )
-            continue
-
-        icon_path = None
-
-        if shortcut_data.get("icon", None):
-            icon_path = Path(shortcut_data["icon"])
-
-        logger.debug(
-            "Creating SteamApp from non-Steam shortcut in %s", install_path
-        )
-
-        steam_apps.append(
-            SteamApp(
-                appid=appid,
-                name=f"Non-Steam shortcut: {shortcut_data['appname']}",
-                prefix_path=prefix_path,
-                install_path=install_path,
-                icon_path=icon_path
-
-            )
-        )
+        if app:
+            steam_apps.append(app)
 
     logger.info(
         "Found %d Steam shortcuts running using Steam compatibility tools",
