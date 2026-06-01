@@ -1039,8 +1039,8 @@ def _resolve_library_folder(path, steam_path):
     flatpak_steam_path = \
         Path.home() / ".var/app/com.valvesoftware.Steam/.local/share/Steam"
 
-    is_library_folder_xdg_steam = str(path) == str(xdg_steam_path)
-    is_flatpak_steam = str(steam_path) == str(flatpak_steam_path)
+    is_library_folder_xdg_steam = path == xdg_steam_path
+    is_flatpak_steam = Path(steam_path) == flatpak_steam_path
 
     # Adjust the path if the library folder is "~/.local/share/Steam"
     # and we're looking for library folders in
@@ -1077,9 +1077,9 @@ def _resolve_library_folder(path, steam_path):
     # In case of multiple matches, prioritize those that contain
     # a 'steamapps' subdirectory
     candidates.sort(
-        key=lambda path: any(
-            path.name.lower() == "steamapps"
-            for path in path.iterdir()
+        key=lambda candidate_path: any(
+            sub_path.name.lower() == "steamapps"
+            for sub_path in candidate_path.iterdir()
         ),
         reverse=True
     )
@@ -1093,7 +1093,7 @@ def _resolve_library_folder(path, steam_path):
             path, candidates[0]
         )
 
-    if str(candidates[0]) != str(path):
+    if candidates[0] != path:
         logger.warning(
             "Steam library path %s in configuration differs from "
             "found path %s. Was this path renamed?",
