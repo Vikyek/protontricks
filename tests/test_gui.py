@@ -8,7 +8,8 @@ from PIL import Image
 
 from protontricks.gui import (prompt_filesystem_access,
                               select_steam_app_with_gui,
-                              select_steam_installation)
+                              select_steam_installation,
+                              show_text_dialog)
 from protontricks.steam import SteamApp
 
 
@@ -476,3 +477,78 @@ class TestPromptFilesystemAccess:
         assert "/mnt/fake_SSD " not in input_
         assert "/mnt/fake_SSD_2" not in input_
         assert "/mnt/fake_SSD_3" in input_
+
+class TestShowTextDialog:
+    @pytest.mark.parametrize("gui_cmd", ["yad", "zenity"])
+    def test_show_text_dialog_ok(self, gui_provider, monkeypatch, gui_cmd):
+        """
+        Test that `show_text_dialog` returns True when the user clicks OK
+        and produces correct CLI arguments for the GUI provider.
+        """
+        monkeypatch.setenv("PROTONTRICKS_GUI", gui_cmd)
+
+        gui_provider.returncode = 0
+
+        result = show_text_dialog(
+            title="Test Title",
+            text="Test Text",
+            window_icon="test-icon",
+            ok_label="Custom OK",
+            cancel_label="Custom Cancel",
+            width=800,
+            height=600
+        )
+
+        assert result is True
+
+        args = gui_provider.args
+        assert args[0] == gui_cmd
+        assert "--text-info" in args
+        assert "--window-icon" in args
+        assert args[args.index("--window-icon") + 1] == "test-icon"
+        assert "--title" in args
+        assert args[args.index("--title") + 1] == "Test Title"
+        assert "--width" in args
+        assert args[args.index("--width") + 1] == "800"
+        assert "--height" in args
+        assert args[args.index("--height") + 1] == "600"
+
+        if gui_cmd == "yad":
+            assert "--button=Custom OK:0" in args
+            assert "--button=Custom Cancel:1" not in args
+        elif gui_cmd == "zenity":
+            assert "--ok-label" in args
+            assert args[args.index("--ok-label") + 1] == "Custom OK"
+            assert "--cancel-label" in args
+            assert args[args.index("--cancel-label") + 1] == "Custom Cancel"
+
+        assert gui_provider.kwargs["input"] == b"Test Text"
+
+    @pytest.mark.parametrize("gui_cmd", ["yad", "zenity"])
+    def test_show_text_dialog_cancel(self, gui_provider, monkeypatch, gui_cmd):
+        """
+        Test that `show_text_dialog` returns False when the user clicks Cancel.
+        """
+        monkeypatch.setenv("PROTONTRICKS_GUI", gui_cmd)
+
+        gui_provider.returncode = 1
+
+        result = show_text_dialog(
+            title="Test Title",
+            text="Test Text",
+            window_icon="test-icon",
+            add_cancel_button=True
+        )
+
+        assert result is False
+
+        args = gui_provider.args
+
+        if gui_cmd == "yad":
+            assert "--button=OK:0" in args
+            assert "--button=Cancel:1" in args
+        elif gui_cmd == "zenity":
+            assert "--ok-label" in args
+            assert args[args.index("--ok-label") + 1] == "OK"
+            assert "--cancel-label" in args
+            assert args[args.index("--cancel-label") + 1] == "Cancel"
