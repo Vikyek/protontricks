@@ -1404,6 +1404,72 @@ def get_appid_from_shortcut(target, name):
     return result >> 32
 
 
+def _create_shortcut_steam_app(shortcut_data, steam_lib_paths):
+    """
+    Create a SteamApp object from a single custom shortcut's data
+    """
+    if "appid" in shortcut_data:
+        try:
+            appid = shortcut_data["appid"] & 0xffffffff
+        except TypeError:
+            logger.info(
+                "Skipping unrecognized non-Steam shortcut with app ID "
+                "'%s'",
+                shortcut_data["appid"]
+            )
+            return None
+    else:
+        appid = get_appid_from_shortcut(
+            target=shortcut_data["exe"], name=shortcut_data["appname"]
+        )
+
+    prefix_path = find_appid_proton_prefix(
+        appid=appid, steam_lib_paths=steam_lib_paths
+    )
+    if not prefix_path:
+        logger.info(
+            "Shortcut %s (%s) does not have a prefix. "
+            "It's either not a Proton app or it hasn't been launched yet.",
+            shortcut_data["appname"], appid
+        )
+        return None
+
+    install_path = Path(shortcut_data["startdir"].strip('"'))
+
+    try:
+        # Check that we have permission to access the installation
+        # directory, whether it exists or not. Any attempts to check
+        # any files will fail later if this isn't done.
+        install_path.is_dir()
+
+        if not prefix_path.is_dir():
+            return None
+    except PermissionError as exc:
+        logger.warning(
+            "Skipping shortcut %s due to insufficient permissions. "
+            "Error: %s",
+            shortcut_data["appname"], str(exc)
+        )
+        return None
+
+    icon_path = None
+
+    if shortcut_data.get("icon", None):
+        icon_path = Path(shortcut_data["icon"])
+
+    logger.debug(
+        "Creating SteamApp from non-Steam shortcut in %s", install_path
+    )
+
+    return SteamApp(
+        appid=appid,
+        name=f"Non-Steam shortcut: {shortcut_data['appname']}",
+        prefix_path=prefix_path,
+        install_path=install_path,
+        icon_path=icon_path
+    )
+
+
 def get_custom_windows_shortcuts(steam_path, steam_lib_paths):
     """
     Get a list of custom shortcuts for Windows applications as a list
@@ -1436,69 +1502,11 @@ def get_custom_windows_shortcuts(steam_path, steam_lib_paths):
         shortcut_data = lower_dict(shortcut_data)
         shortcut_id = int(shortcut_id)
 
-        if "appid" in shortcut_data:
-            try:
-                appid = shortcut_data["appid"] & 0xffffffff
-            except TypeError:
-                logger.info(
-                    "Skipping unrecognized non-Steam shortcut with app ID "
-                    "'%s'",
-                    shortcut_data["appid"]
-                )
-                continue
-        else:
-            appid = get_appid_from_shortcut(
-                target=shortcut_data["exe"], name=shortcut_data["appname"]
-            )
-
-        prefix_path = find_appid_proton_prefix(
-            appid=appid, steam_lib_paths=steam_lib_paths
+        app = _create_shortcut_steam_app(
+            shortcut_data=shortcut_data, steam_lib_paths=steam_lib_paths
         )
-        if not prefix_path:
-            logger.info(
-                "Shortcut %s (%s) does not have a prefix. "
-                "It's either not a Proton app or it hasn't been launched yet.",
-                shortcut_data["appname"], appid
-            )
-            continue
-
-        install_path = Path(shortcut_data["startdir"].strip('"'))
-
-        try:
-            # Check that we have permission to access the installation
-            # directory, whether it exists or not. Any attempts to check
-            # any files will fail later if this isn't done.
-            install_path.is_dir()
-
-            if not prefix_path.is_dir():
-                continue
-        except PermissionError as exc:
-            logger.warning(
-                "Skipping shortcut %s due to insufficient permissions. "
-                "Error: %s",
-                shortcut_data["appname"], str(exc)
-            )
-            continue
-
-        icon_path = None
-
-        if shortcut_data.get("icon", None):
-            icon_path = Path(shortcut_data["icon"])
-
-        logger.debug(
-            "Creating SteamApp from non-Steam shortcut in %s", install_path
-        )
-
-        steam_apps.append(
-            SteamApp(
-                appid=appid,
-                name=f"Non-Steam shortcut: {shortcut_data['appname']}",
-                prefix_path=prefix_path,
-                install_path=install_path,
-                icon_path=icon_path
-
-            )
-        )
+        if app:
+            steam_apps.append(app)
 
     logger.info(
         "Found %d Steam shortcuts running using Steam compatibility tools",
