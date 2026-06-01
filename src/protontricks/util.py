@@ -7,7 +7,9 @@ import shlex
 import shutil
 import stat
 import tempfile
+from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any, Dict, Optional
 from subprocess import DEVNULL, PIPE, Popen, TimeoutExpired, check_output, run
 
 __all__ = (
@@ -15,10 +17,19 @@ __all__ = (
     "is_steam_deck", "is_steamos", "get_legacy_runtime_library_paths",
     "get_host_library_paths", "RUNTIME_ROOT_GLOB_PATTERNS",
     "get_runtime_library_paths", "WINE_SCRIPT_TEMPLATE",
-    "get_cache_dir", "create_wine_bin_dir", "run_command"
+    "get_cache_dir", "create_wine_bin_dir", "RunEnv", "run_command"
 )
 
 logger = logging.getLogger("protontricks")
+
+@dataclass
+class RunEnv:
+    """Dataclass storing environment and runtime settings for run_command"""
+    use_steam_runtime: bool = False
+    legacy_steam_runtime_path: Optional[Any] = None
+    use_bwrap: Optional[bool] = None
+    start_wineserver: Optional[bool] = None
+    env: Optional[Dict[str, str]] = field(default_factory=dict)
 
 SUPPORTED_STEAM_RUNTIMES = [
     # Old names
@@ -444,11 +455,7 @@ def _start_process(args, wait=False, **kwargs):
 
 def run_command(
         winetricks_path, proton_app, steam_app, command,
-        use_steam_runtime=False,
-        legacy_steam_runtime_path=None,
-        use_bwrap=None,
-        start_wineserver=None,
-        env=None,
+        run_env: Optional[RunEnv] = None,
         **kwargs):
     """Run an arbitrary command with the correct environment variables
     for the given Proton app
@@ -470,6 +477,13 @@ def run_command(
 
     :returns: Return code of the executed command
     """
+    run_env = run_env or RunEnv()
+    use_steam_runtime = run_env.use_steam_runtime
+    legacy_steam_runtime_path = run_env.legacy_steam_runtime_path
+    use_bwrap = run_env.use_bwrap
+    start_wineserver = run_env.start_wineserver
+    env = run_env.env
+
     # Check for incomplete Steam Runtime installation
     runtime_install_incomplete = \
         proton_app.required_tool_appid and not proton_app.required_tool_app
