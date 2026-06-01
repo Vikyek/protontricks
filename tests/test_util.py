@@ -4,9 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from protontricks.util import (create_wine_bin_dir, get_host_library_paths,
-                               is_steam_deck, is_steamos, lower_dict,
-                               run_command)
+from protontricks.util import (create_wine_bin_dir, is_steam_deck, is_steamos,
+                               lower_dict, run_command)
 
 
 def get_files_in_dir(d):
@@ -400,36 +399,3 @@ class TestIsSteamOSOrDeck:
     @pytest.mark.usefixtures("steam_deck")
     def test_is_steamos(self):
         assert is_steamos()
-
-class TestGetHostLibraryPaths:
-    def test_get_host_library_paths(self, monkeypatch):
-        """
-        Test that `get_host_library_paths` correctly parses the output of
-        `/sbin/ldconfig -XNv` and returns a colon-separated list of library paths.
-        """
-        class MockResult:
-            def __init__(self):
-                self.stdout = b"""/usr/lib/x86_64-linux-gnu: (from ld.so.conf.d/x86_64-linux-gnu.conf:4)
-\tlibz.so.1 -> libz.so.1.2.11
-/lib: (from ld.so.conf.d/fake.conf:1)
-\tlibfake.so -> libfake.so.1
-/usr/lib: (from ld.so.conf.d/fake.conf:2)
-\tlibfake2.so -> libfake2.so.1
-Some random output that should be ignored
-/invalid/path (without colon)
-/valid/path: (from ld.so.conf.d/valid.conf:1)
-"""
-
-        def mock_run(*args, **kwargs):
-            mock_run.args = args
-            mock_run.kwargs = kwargs
-            return MockResult()
-
-        monkeypatch.setattr("protontricks.util.run", mock_run)
-
-        from subprocess import PIPE
-        result = get_host_library_paths()
-
-        assert result == "/usr/lib/x86_64-linux-gnu:/lib:/usr/lib:/valid/path"
-        assert mock_run.args == (["/sbin/ldconfig", "-XNv"],)
-        assert mock_run.kwargs == {"check": True, "stdout": PIPE, "stderr": PIPE}

@@ -24,7 +24,14 @@ def cli(args=None):
     main(args)
 
 
-def get_parser():
+@cli_error_handler
+def main(args=None, steam_path=None, steam_root=None):
+    """
+    'protontricks' script entrypoint
+    """
+    if args is None:
+        args = sys.argv[1:]
+
     parser = CustomArgumentParser(
         description=(
             "Wrapper for running Winetricks commands for "
@@ -110,18 +117,6 @@ def get_parser():
         "-V", "--version", action="version",
         version=f"%(prog)s ({__version__})"
     )
-    return parser
-
-
-@cli_error_handler
-def main(args=None, steam_path=None, steam_root=None):
-    """
-    'protontricks' script entrypoint
-    """
-    if args is None:
-        args = sys.argv[1:]
-
-    parser = get_parser()
 
     if len(args) == 0:
         # No arguments were provided, default to GUI

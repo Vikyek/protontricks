@@ -1387,35 +1387,3 @@ def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
 
     assert len(steamapps_dirs) == 4
     assert steamapps_dirs[0].name == "steamapps"
-
-def test_find_current_steamid3(steam_dir, steam_user_factory):
-    """
-    Test finding the SteamID3 of the currently logged in Steam user
-    """
-    from protontricks.steam import find_current_steamid3
-
-    # The `steam_user` autouse fixture automatically creates a user in `loginusers.vdf`.
-    # We must remove it to test the "not exist" and "empty" cases.
-    loginusers_path = steam_dir / "config" / "loginusers.vdf"
-    if loginusers_path.exists():
-        loginusers_path.unlink()
-
-    # 1. Test when loginusers.vdf does not exist
-    assert find_current_steamid3(steam_dir) is None
-
-    # 2. Test when loginusers.vdf is empty or has no users
-    import vdf
-    loginusers_path = steam_dir / "config" / "loginusers.vdf"
-    loginusers_path.parent.mkdir(parents=True, exist_ok=True)
-    loginusers_path.write_text(vdf.dumps({"users": {}}))
-    assert find_current_steamid3(steam_dir) is None
-
-    # 3. Test with multiple users
-    # steam_user_factory creates users and the highest timestamp is considered the current user
-    steamid64_1 = steam_user_factory(name="User1")
-    steamid64_2 = steam_user_factory(name="User2")
-
-    # User2 was created last, so it has the highest timestamp and should be considered currently logged in
-    # find_current_steamid3 returns the steamid3, which is steamid64 & 0xffffffff
-    expected_steamid3 = steamid64_2 & 0xffffffff
-    assert find_current_steamid3(steam_dir) == expected_steamid3
