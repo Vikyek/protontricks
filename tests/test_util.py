@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from protontricks.util import (create_wine_bin_dir, is_steam_deck, is_steamos,
-                               lower_dict, run_command)
+                               lower_dict, run_command, get_runtime_library_paths)
 
 
 def get_files_in_dir(d):
@@ -399,3 +399,90 @@ class TestIsSteamOSOrDeck:
     @pytest.mark.usefixtures("steam_deck")
     def test_is_steamos(self):
         assert is_steamos()
+
+class TestGetRuntimeLibraryPaths:
+    def test_use_bwrap(self, default_proton):
+        """
+        Test that when use_bwrap=True, only the proton dist library paths
+        are returned
+        """
+        import os
+        paths = get_runtime_library_paths(default_proton, use_bwrap=True)
+        expected = "".join([
+            str(default_proton.proton_dist_path / "lib"), os.pathsep,
+            str(default_proton.proton_dist_path / "lib64"), os.pathsep
+        ])
+        assert paths == expected
+
+    def test_use_bwrap_false_success(
+            self, proton_factory, runtime_app_factory, monkeypatch):
+        """
+        Test that when use_bwrap=False, the function successfully returns
+        the combination of Proton library paths, host library paths, and
+        the separately installed Steam Runtime paths.
+        """
+        import os
+
+        # Mock get_host_library_paths
+        monkeypatch.setattr(
+            "protontricks.util.get_host_library_paths",
+            lambda: "/mock/host/lib"
+        )
+
+        steam_runtime = runtime_app_factory(
+            name="Steam Linux Runtime - Sniper",
+            appid=1628350,
+            runtime_dir_name="sniper"
+        )
+
+        # Create the glob pattern matching directory
+        runtime_root = steam_runtime.install_path / "var" / "sniper" / "files"
+        runtime_root.mkdir(parents=True)
+
+        proton_app = proton_factory(
+            name="Proton 8.0", appid=2337000, compat_tool_name="proton_8",
+            is_default_proton=False, required_tool_app=steam_runtime
+        )
+
+        paths = get_runtime_library_paths(proton_app, use_bwrap=False)
+        expected = "".join([
+            str(proton_app.proton_dist_path / "lib"), os.pathsep,
+            str(proton_app.proton_dist_path / "lib64"), os.pathsep,
+            "/mock/host/lib", os.pathsep,
+            str(runtime_root / "lib" / "i386-linux-gnu"), os.pathsep,
+            str(runtime_root / "lib" / "x86_64-linux-gnu")
+        ])
+        assert paths == expected
+
+    def test_use_bwrap_false_failure(
+            self, proton_factory, runtime_app_factory, monkeypatch):
+        """
+        Test that when use_bwrap=False and the runtime root cannot be
+        found, a RuntimeError is raised.
+        """
+        # Mock get_host_library_paths (though it shouldn't be reached)
+        monkeypatch.setattr(
+            "protontricks.util.get_host_library_paths",
+            lambda: "/mock/host/lib"
+        )
+
+        steam_runtime = runtime_app_factory(
+            name="Steam Linux Runtime - Sniper",
+            appid=1628350,
+            runtime_dir_name="sniper"
+        )
+
+        import shutil
+        # runtime_app_factory creates the directories by default,
+        # so we need to remove them to trigger the failure.
+        shutil.rmtree(steam_runtime.install_path / "sniper")
+
+        proton_app = proton_factory(
+            name="Proton 8.0", appid=2337000, compat_tool_name="proton_8",
+            is_default_proton=False, required_tool_app=steam_runtime
+        )
+
+        with pytest.raises(RuntimeError) as exc:
+            get_runtime_library_paths(proton_app, use_bwrap=False)
+
+        assert "Could not find Steam Runtime runtime root for Steam Linux Runtime - Sniper" in str(exc.value)
