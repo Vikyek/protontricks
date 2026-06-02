@@ -4,8 +4,9 @@ from pathlib import Path
 
 import pytest
 
-from protontricks.util import (create_wine_bin_dir, is_steam_deck, is_steamos,
-                               lower_dict, run_command)
+from protontricks.util import (create_wine_bin_dir, get_cache_dir,
+                               is_steam_deck, is_steamos, lower_dict,
+                               run_command)
 
 
 def get_files_in_dir(d):
@@ -346,6 +347,34 @@ class TestRunCommand:
 
         command = command_mock.commands[-1]
         assert command.env["WINEPREFIX"] == "/custom/path/pfx"
+
+
+class TestGetCacheDir:
+    def test_default_cache_dir(self, monkeypatch, tmp_path):
+        """
+        Test that default cache directory is created correctly when
+        XDG_CACHE_HOME is not set
+        """
+        monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+
+        cache_dir = get_cache_dir()
+
+        assert cache_dir == tmp_path / ".cache" / "protontricks"
+        assert cache_dir.is_dir()
+
+    def test_custom_cache_dir(self, monkeypatch, tmp_path):
+        """
+        Test that custom cache directory is created correctly when
+        XDG_CACHE_HOME is set
+        """
+        custom_cache = tmp_path / "custom_cache"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(custom_cache))
+
+        cache_dir = get_cache_dir()
+
+        assert cache_dir == custom_cache / "protontricks"
+        assert cache_dir.is_dir()
 
 
 class TestLowerDict:
