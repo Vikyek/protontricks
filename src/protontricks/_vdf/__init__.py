@@ -295,6 +295,46 @@ BIN_END         = b'\x08'
 BIN_INT64       = b'\x0A'
 BIN_END_ALT     = b'\x0B'
 
+_int32 = struct.Struct('<i')
+_uint64 = struct.Struct('<Q')
+_int64 = struct.Struct('<q')
+_float32 = struct.Struct('<f')
+
+def _read_string(fp, wide=False):
+    buf, end = b'', -1
+    offset = fp.tell()
+
+    # locate string end
+    while end == -1:
+        chunk = fp.read(64)
+
+        if chunk == b'':
+            raise SyntaxError("Unterminated cstring (offset: %d)" % offset)
+
+        buf += chunk
+        end = buf.find(b'\x00\x00' if wide else b'\x00')
+
+    if wide:
+        end += end % 2
+
+    # rewind fp
+    fp.seek(end - len(buf) + (2 if wide else 1), 1)
+
+    # decode string
+    result = buf[:end]
+
+    if wide:
+        result = result.decode('utf-16')
+    elif bytes is not str:
+        result = result.decode('utf-8', 'replace')
+    else:
+        try:
+            result.decode('ascii')
+        except:
+            result = result.decode('utf-8', 'replace')
+
+    return result
+
 def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=True):
     """
     Deserialize ``b`` (``bytes`` containing a VDF in "binary form")
@@ -341,47 +381,6 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
     if not issubclass(mapper, Mapping):
         raise TypeError("Expected mapper to be subclass of dict, got %s" % type(mapper))
 
-    # helpers
-    int32 = struct.Struct('<i')
-    uint64 = struct.Struct('<Q')
-    int64 = struct.Struct('<q')
-    float32 = struct.Struct('<f')
-
-    def read_string(fp, wide=False):
-        buf, end = b'', -1
-        offset = fp.tell()
-
-        # locate string end
-        while end == -1:
-            chunk = fp.read(64)
-
-            if chunk == b'':
-                raise SyntaxError("Unterminated cstring (offset: %d)" % offset)
-
-            buf += chunk
-            end = buf.find(b'\x00\x00' if wide else b'\x00')
-
-        if wide:
-            end += end % 2
-
-        # rewind fp
-        fp.seek(end - len(buf) + (2 if wide else 1), 1)
-
-        # decode string
-        result = buf[:end]
-
-        if wide:
-            result = result.decode('utf-16')
-        elif bytes is not str:
-            result = result.decode('utf-8', 'replace')
-        else:
-            try:
-                result.decode('ascii')
-            except:
-                result = result.decode('utf-8', 'replace')
-
-        return result
-
     stack = [mapper()]
     CURRENT_BIN_END = BIN_END if not alt_format else BIN_END_ALT
 
@@ -396,11 +395,11 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
             # If 'key_table' was provided, each key is an int32 value that
             # needs to be mapped to an actual field name using a key table.
             # Newer appinfo.vdf (V29+) stores this table at the end of the file.
-            index = int32.unpack(fp.read(int32.size))[0]
+            index = _int32.unpack(fp.read(_int32.size))[0]
 
             key = key_table[index]
         else:
-            key = read_string(fp)
+            key = _read_string(fp)
 
         if t == BIN_NONE:
             if merge_duplicate_keys and key in stack[-1]:
@@ -410,11 +409,11 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
                 stack[-1][key] = _m
             stack.append(_m)
         elif t == BIN_STRING:
-            stack[-1][key] = read_string(fp)
+            stack[-1][key] = _read_string(fp)
         elif t == BIN_WIDESTRING:
-            stack[-1][key] = read_string(fp, wide=True)
+            stack[-1][key] = _read_string(fp, wide=True)
         elif t in (BIN_INT32, BIN_POINTER, BIN_COLOR):
-            val = int32.unpack(fp.read(int32.size))[0]
+            val = _int32.unpack(fp.read(_int32.size))[0]
 
             if t == BIN_POINTER:
                 val = POINTER(val)
@@ -423,11 +422,11 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
 
             stack[-1][key] = val
         elif t == BIN_UINT64:
-            stack[-1][key] = UINT_64(uint64.unpack(fp.read(int64.size))[0])
+            stack[-1][key] = UINT_64(_uint64.unpack(fp.read(_int64.size))[0])
         elif t == BIN_INT64:
-            stack[-1][key] = INT_64(int64.unpack(fp.read(int64.size))[0])
+            stack[-1][key] = INT_64(_int64.unpack(fp.read(_int64.size))[0])
         elif t == BIN_FLOAT32:
-            stack[-1][key] = float32.unpack(fp.read(float32.size))[0]
+            stack[-1][key] = _float32.unpack(fp.read(_float32.size))[0]
         else:
             raise SyntaxError("Unknown data type at offset %d: %s" % (fp.tell() - 1, repr(t)))
 
@@ -463,11 +462,6 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
     if level == 0 and len(obj) == 0:
         return
 
-    int32 = struct.Struct('<i')
-    uint64 = struct.Struct('<Q')
-    int64 = struct.Struct('<q')
-    float32 = struct.Struct('<f')
-
     for key, value in obj.items():
         if isinstance(key, string_type):
             key = key.encode('utf-8')
@@ -479,9 +473,9 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
             for chunk in _binary_dump_gen(value, level+1, alt_format=alt_format):
                 yield chunk
         elif isinstance(value, UINT_64):
-            yield BIN_UINT64 + key + BIN_NONE + uint64.pack(value)
+            yield BIN_UINT64 + key + BIN_NONE + _uint64.pack(value)
         elif isinstance(value, INT_64):
-            yield BIN_INT64 + key + BIN_NONE + int64.pack(value)
+            yield BIN_INT64 + key + BIN_NONE + _int64.pack(value)
         elif isinstance(value, string_type):
             try:
                 value = value.encode('utf-8') + BIN_NONE
@@ -491,7 +485,7 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
                 yield BIN_WIDESTRING
             yield key + BIN_NONE + value
         elif isinstance(value, float):
-            yield BIN_FLOAT32 + key + BIN_NONE + float32.pack(value)
+            yield BIN_FLOAT32 + key + BIN_NONE + _float32.pack(value)
         elif isinstance(value, (COLOR, POINTER, int, int_type)):
             if isinstance(value, COLOR):
                 yield BIN_COLOR
@@ -500,7 +494,7 @@ def _binary_dump_gen(obj, level=0, alt_format=False):
             else:
                 yield BIN_INT32
             yield key + BIN_NONE
-            yield int32.pack(value)
+            yield _int32.pack(value)
         else:
             raise TypeError("Unsupported type: %s" % type(value))
 
