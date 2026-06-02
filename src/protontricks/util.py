@@ -7,9 +7,7 @@ import shlex
 import shutil
 import stat
 import tempfile
-from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
 from subprocess import DEVNULL, PIPE, Popen, TimeoutExpired, check_output, run
 
 __all__ = (
@@ -17,19 +15,10 @@ __all__ = (
     "is_steam_deck", "is_steamos", "get_legacy_runtime_library_paths",
     "get_host_library_paths", "RUNTIME_ROOT_GLOB_PATTERNS",
     "get_runtime_library_paths", "WINE_SCRIPT_TEMPLATE",
-    "get_cache_dir", "create_wine_bin_dir", "RunEnv", "run_command"
+    "get_cache_dir", "create_wine_bin_dir", "run_command"
 )
 
 logger = logging.getLogger("protontricks")
-
-@dataclass
-class RunEnv:
-    """Dataclass storing environment and runtime settings for run_command"""
-    use_steam_runtime: bool = False
-    legacy_steam_runtime_path: Optional[Any] = None
-    use_bwrap: Optional[bool] = None
-    start_wineserver: Optional[bool] = None
-    env: Dict[str, str] = field(default_factory=dict)
 
 SUPPORTED_STEAM_RUNTIMES = [
     # Old names
@@ -455,7 +444,11 @@ def _start_process(args, wait=False, **kwargs):
 
 def run_command(
         winetricks_path, proton_app, steam_app, command,
-        run_env: Optional[RunEnv] = None,
+        use_steam_runtime=False,
+        legacy_steam_runtime_path=None,
+        use_bwrap=None,
+        start_wineserver=None,
+        env=None,
         **kwargs):
     """Run an arbitrary command with the correct environment variables
     for the given Proton app
@@ -477,13 +470,6 @@ def run_command(
 
     :returns: Return code of the executed command
     """
-    run_env = run_env or RunEnv()
-    use_steam_runtime = run_env.use_steam_runtime
-    legacy_steam_runtime_path = run_env.legacy_steam_runtime_path
-    use_bwrap = run_env.use_bwrap
-    start_wineserver = run_env.start_wineserver
-    env = run_env.env
-
     # Check for incomplete Steam Runtime installation
     runtime_install_incomplete = \
         proton_app.required_tool_appid and not proton_app.required_tool_app
@@ -497,17 +483,6 @@ def run_command(
 
     # Make a copy of the environment variables to use for the subprocesses.
     # Include any additional environment variables if provided.
-def _build_wine_env(
-        winetricks_path, proton_app, steam_app,
-        use_steam_runtime=False,
-        legacy_steam_runtime_path=None,
-        use_bwrap=None,
-        start_wineserver=None,
-        env=None):
-    """
-    Build the Wine environment variables and return the configuration needed
-    to run commands.
-    """
     if env is None:
         env = {}
 
@@ -651,59 +626,6 @@ def _build_wine_env(
         wine_environ["WINESERVER_BIN"] = str(
             proton_app.proton_dist_path / "bin" / "wineserver"
         )
-
-    return wine_environ, use_bwrap, start_wineserver, wine_bin_dir
-
-
-def run_command(
-        winetricks_path, proton_app, steam_app, command,
-        use_steam_runtime=False,
-        legacy_steam_runtime_path=None,
-        use_bwrap=None,
-        start_wineserver=None,
-        env=None,
-        **kwargs):
-    """Run an arbitrary command with the correct environment variables
-    for the given Proton app
-
-    The environment variables are set for the duration of the call
-    and restored afterwards
-
-    If 'use_steam_runtime' is True, run the command using Steam Runtime
-    using either 'legacy_steam_runtime_path' or the Proton app's specific
-    Steam Runtime installation, depending on which one is required.
-
-    If 'use_bwrap' is True, run newer Steam Runtime installations using
-    bwrap based containerization. If None, determine whether bwrap is available
-    and use it if so.
-
-    If 'start_wineserver' is True, launch a background wineserver and keep it
-    alive for the duration of the Protontricks call. If None, launch background
-    wineserver if bwrap can be enabled.
-
-    :returns: Return code of the executed command
-    """
-    # Check for incomplete Steam Runtime installation
-    runtime_install_incomplete = \
-        proton_app.required_tool_appid and not proton_app.required_tool_app
-
-    if use_steam_runtime and runtime_install_incomplete:
-        raise RuntimeError(
-            f"{proton_app.name} is missing the required Steam Runtime. "
-            "You may need to launch a Steam app using this Proton version "
-            "to finish the installation."
-        )
-
-    wine_environ, use_bwrap, start_wineserver, wine_bin_dir = _build_wine_env(
-        winetricks_path=winetricks_path,
-        proton_app=proton_app,
-        steam_app=steam_app,
-        use_steam_runtime=use_steam_runtime,
-        legacy_steam_runtime_path=legacy_steam_runtime_path,
-        use_bwrap=use_bwrap,
-        start_wineserver=start_wineserver,
-        env=env
-    )
 
     temp_dir = Path(tempfile.mkdtemp(prefix="protontricks-"))
     wine_environ["PROTONTRICKS_TEMP_PATH"] = str(temp_dir)
