@@ -9,7 +9,7 @@ import vdf
 from protontricks.steam import (SteamApp, _get_steamapps_subdirs,
                                 find_appid_proton_prefix,
                                 find_steam_compat_tool_app,
-                                find_steam_installations, find_steam_path,
+                                find_steam_installations, find_steam_path, find_legacy_steam_runtime_path,
                                 get_custom_compat_tool_installations,
                                 get_custom_windows_shortcuts, get_steam_apps,
                                 get_steam_lib_paths, iter_appinfo_sections)
@@ -746,6 +746,78 @@ class TestFindAppidProtonPrefix:
         )
         assert \
             path == library_dir_b / "steamapps" / "compatdata" / "10" / "pfx"
+
+class TestFindLegacySteamRuntimePath:
+    def test_disabled(self, tmp_path, monkeypatch):
+        """
+        Return None if STEAM_RUNTIME is set to 0.
+        """
+        monkeypatch.setenv("STEAM_RUNTIME", "0")
+        assert find_legacy_steam_runtime_path(tmp_path) is None
+
+    def test_custom_runtime(self, tmp_path, monkeypatch):
+        """
+        Return the custom Steam Runtime path if STEAM_RUNTIME points to a valid
+        directory.
+        """
+        custom_path = tmp_path / "custom"
+        custom_path.mkdir()
+        monkeypatch.setenv("STEAM_RUNTIME", str(custom_path))
+        assert find_legacy_steam_runtime_path(tmp_path) == custom_path
+
+    def test_custom_runtime_invalid(self, tmp_path, monkeypatch):
+        """
+        Return None if STEAM_RUNTIME points to an invalid directory.
+        """
+        monkeypatch.setenv("STEAM_RUNTIME", str(tmp_path / "invalid"))
+        assert find_legacy_steam_runtime_path(tmp_path) is None
+
+    @pytest.mark.parametrize("env_val", ["1", ""])
+    def test_default_runtime_ubuntu12_32(self, tmp_path, monkeypatch, env_val):
+        """
+        Return the default Steam Runtime path if STEAM_RUNTIME is set to 1 or
+        is empty, and ubuntu12_32/steam-runtime/run.sh exists.
+        """
+        monkeypatch.setenv("STEAM_RUNTIME", env_val)
+
+        expected_path = tmp_path / "ubuntu12_32" / "steam-runtime"
+        expected_path.mkdir(parents=True)
+        (expected_path / "run.sh").touch()
+
+        assert find_legacy_steam_runtime_path(tmp_path) == expected_path
+
+    @pytest.mark.parametrize("env_val", ["1", ""])
+    def test_default_runtime_root(self, tmp_path, monkeypatch, env_val):
+        """
+        Return the fallback Steam Runtime path if STEAM_RUNTIME is set to 1 or
+        is empty, and steam-runtime/run.sh exists.
+        """
+        monkeypatch.setenv("STEAM_RUNTIME", env_val)
+
+        expected_path = tmp_path / "steam-runtime"
+        expected_path.mkdir(parents=True)
+        (expected_path / "run.sh").touch()
+
+        assert find_legacy_steam_runtime_path(tmp_path) == expected_path
+
+    def test_default_runtime_unset(self, tmp_path, monkeypatch):
+        """
+        Return the default Steam Runtime path if STEAM_RUNTIME is unset.
+        """
+        monkeypatch.delenv("STEAM_RUNTIME", raising=False)
+
+        expected_path = tmp_path / "ubuntu12_32" / "steam-runtime"
+        expected_path.mkdir(parents=True)
+        (expected_path / "run.sh").touch()
+
+        assert find_legacy_steam_runtime_path(tmp_path) == expected_path
+
+    def test_default_runtime_not_found(self, tmp_path, monkeypatch):
+        """
+        Return None if STEAM_RUNTIME is 1/empty but no valid runtime is found.
+        """
+        monkeypatch.setenv("STEAM_RUNTIME", "1")
+        assert find_legacy_steam_runtime_path(tmp_path) is None
 
 
 class TestFindSteamPath:

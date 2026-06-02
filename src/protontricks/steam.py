@@ -534,11 +534,20 @@ def find_legacy_steam_runtime_path(steam_root):
     elif env_steam_runtime in ["1", ""]:
         # User has enabled Steam Runtime or doesn't have STEAM_RUNTIME set;
         # default to enabled Steam Runtime in either case
-        steam_runtime_path = steam_root / "ubuntu12_32" / "steam-runtime"
+        paths = [
+            steam_root / "ubuntu12_32" / "steam-runtime",
+            steam_root / "steam-runtime"
+        ]
 
-        logger.info(
-            "Using default Steam Runtime at %s", str(steam_runtime_path))
-        return steam_runtime_path
+        try:
+            steam_runtime_path = next(
+                path for path in paths if (path / "run.sh").exists()
+            )
+            logger.info(
+                "Using default Steam Runtime at %s", str(steam_runtime_path))
+            return steam_runtime_path
+        except StopIteration:
+            pass
 
     logger.error(
         "Path in STEAM_RUNTIME doesn't point to a valid Steam Runtime!")
