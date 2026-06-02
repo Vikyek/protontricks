@@ -239,8 +239,7 @@ def dump(obj, fp, pretty=False, escaped=True):
     if not isinstance(escaped, bool):
         raise TypeError("Expected escaped to be of type bool")
 
-    for chunk in _dump_gen(obj, pretty, escaped):
-        fp.write(chunk)
+    fp.writelines(_dump_gen(obj, pretty, escaped))
 
 
 def _dump_gen(data, pretty=False, escaped=True, level=0):
@@ -456,8 +455,7 @@ def binary_dump(obj, fp, alt_format=False):
     if not hasattr(fp, 'write'):
         raise TypeError("Expected fp to have write() method")
 
-    for chunk in _binary_dump_gen(obj, alt_format=alt_format):
-        fp.write(chunk)
+    fp.writelines(_binary_dump_gen(obj, alt_format=alt_format))
 
 def _binary_dump_gen(obj, level=0, alt_format=False):
     if level == 0 and len(obj) == 0:
