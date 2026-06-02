@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from protontricks.util import (create_wine_bin_dir, is_steam_deck, is_steamos,
-                               lower_dict, run_command)
+                               lower_dict, RunEnv, run_command)
 
 
 def get_files_in_dir(d):
@@ -67,8 +67,10 @@ class TestRunCommand:
             proton_app=default_proton,
             steam_app=steam_app,
             command=["echo", "nothing"],
-            use_steam_runtime=True,
-            legacy_steam_runtime_path=steam_runtime_dir / "steam-runtime"
+            run_env=RunEnv(
+                use_steam_runtime=True,
+                legacy_steam_runtime_path=steam_runtime_dir / "steam-runtime"
+            )
         )
 
         # Proxy scripts are used if no environment variables are set by the
@@ -99,8 +101,10 @@ class TestRunCommand:
             proton_app=default_proton,
             steam_app=steam_app,
             command=["echo", "nothing"],
-            use_steam_runtime=True,
-            legacy_steam_runtime_path=steam_runtime_dir / "steam-runtime"
+            run_env=RunEnv(
+                use_steam_runtime=True,
+                legacy_steam_runtime_path=steam_runtime_dir / "steam-runtime"
+            )
         )
 
         # User provided Wine paths are used even when Steam Runtime is enabled
@@ -135,7 +139,9 @@ class TestRunCommand:
             steam_app=steam_app,
             command=["echo", "nothing"],
             shell=True,
-            use_steam_runtime=True
+            run_env=RunEnv(
+                use_steam_runtime=True
+            )
         )
 
         # Warning will be logged since Protontricks does not recognize
@@ -181,14 +187,16 @@ class TestRunCommand:
             proton_app=default_proton,
             steam_app=steam_app,
             command=["/bin/env"],
-            env={
-                # Use same environment variables as in the mocked 'locale'
-                # script
-                "LANG": "fi_FI.UTF-8",
-                "LC_CTYPE": "en_US.utf8",
-                "LC_TIME": "en_US.UTF-8",
-                "LC_NUMERIC": "D"
-            }
+            run_env=RunEnv(
+                env={
+                    # Use same environment variables as in the mocked 'locale'
+                    # script
+                    "LANG": "fi_FI.UTF-8",
+                    "LC_CTYPE": "en_US.utf8",
+                    "LC_TIME": "en_US.UTF-8",
+                    "LC_NUMERIC": "D",
+                }
+            )
         )
 
         # Warning will be logged to indicate 'LANG' was changed
@@ -230,9 +238,11 @@ class TestRunCommand:
             proton_app=default_proton,
             steam_app=steam_app,
             command=["/bin/env"],
-            env={
-                "WINEDLLOVERRIDES": "fakelibrary,anotherfakelibrary=b,n;dxgi=b"
-            }
+            run_env=RunEnv(
+                env={
+                    "WINEDLLOVERRIDES": "fakelibrary,anotherfakelibrary=b,n;dxgi=b"
+                }
+            )
         )
 
         command = command_mock.commands[-1]
@@ -288,9 +298,11 @@ class TestRunCommand:
             proton_app=default_proton,
             steam_app=steam_app,
             command=["/bin/env"],
-            env={
-                "WINE_LARGE_ADDRESS_AWARE": "2"
-            }
+            run_env=RunEnv(
+                env={
+                    "WINE_LARGE_ADDRESS_AWARE": "2"
+                }
+            )
         )
 
         command = command_mock.commands[-1]
@@ -321,7 +333,9 @@ class TestRunCommand:
                 steam_app=steam_app,
                 command=["echo", "nothing"],
                 shell=True,
-                use_steam_runtime=True
+                run_env=RunEnv(
+                    use_steam_runtime=True
+                )
             )
 
         assert str(exc.value) == "bwrap launcher crashed, returncode: 1"

@@ -13,7 +13,7 @@ import sys
 from collections import defaultdict
 
 from .. import __version__
-from ..util import run_command
+from ..util import RunEnv, run_command
 from .command import BaseCommand
 from .util import CustomArgumentParser, cli_error_handler, enable_logging
 
@@ -183,10 +183,12 @@ class RunWinetricksCommand(BaseCommand):
             winetricks_path=self.winetricks_path,
             proton_app=self.proton_app,
             steam_app=self.steam_app,
-            use_steam_runtime=self.use_steam_runtime,
-            legacy_steam_runtime_path=self.legacy_steam_runtime_path,
-            use_bwrap=self.use_bwrap,
-            start_wineserver=self.start_background_wineserver,
+            run_env=RunEnv(
+                use_steam_runtime=self.use_steam_runtime,
+                legacy_steam_runtime_path=self.legacy_steam_runtime_path,
+                use_bwrap=self.use_bwrap,
+                start_wineserver=self.start_background_wineserver
+            ),
             command=[str(self.winetricks_path)] + self.cli_args.winetricks_command,
             cwd=cwd
         )
@@ -207,11 +209,13 @@ class RunWinetricksGUICommand(BaseCommand):
             winetricks_path=self.winetricks_path,
             proton_app=self.proton_app,
             steam_app=self.steam_app,
-            use_steam_runtime=self.use_steam_runtime,
-            legacy_steam_runtime_path=self.legacy_steam_runtime_path,
+            run_env=RunEnv(
+                use_steam_runtime=self.use_steam_runtime,
+                legacy_steam_runtime_path=self.legacy_steam_runtime_path,
+                use_bwrap=self.use_bwrap,
+                start_wineserver=self.start_background_wineserver
+            ),
             command=[str(self.winetricks_path), "--gui"],
-            use_bwrap=self.use_bwrap,
-            start_wineserver=self.start_background_wineserver,
             cwd=cwd
         )
 
@@ -230,10 +234,12 @@ class RunCustomCommand(BaseCommand):
             proton_app=self.proton_app,
             steam_app=self.steam_app,
             command=self.cli_args.command,
-            use_steam_runtime=self.use_steam_runtime,
-            legacy_steam_runtime_path=self.legacy_steam_runtime_path,
-            use_bwrap=self.use_bwrap,
-            start_wineserver=self.start_background_wineserver,
+            run_env=RunEnv(
+                use_steam_runtime=self.use_steam_runtime,
+                legacy_steam_runtime_path=self.legacy_steam_runtime_path,
+                use_bwrap=self.use_bwrap,
+                start_wineserver=self.start_background_wineserver
+            ),
             # Pass the command directly into the shell *without*
             # escaping it
             shell=True,
