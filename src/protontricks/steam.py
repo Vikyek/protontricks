@@ -216,60 +216,11 @@ class SteamApp(object):
             "Creating SteamApp from manifest file in %s", path
         )
 
-        try:
-            content = path.read_text(encoding="utf-8")
-        except UnicodeDecodeError:
-            # This might occur if the appmanifest becomes corrupted
-            # eg. due to running a Linux filesystem under Windows
-            # In that case just skip it
-            logger.warning(
-                "Skipping malformed appmanifest %s", path
-            )
-            return None
-        except PermissionError:
-            # Skip the appmanifest if we can't read it.
-            # Steam also seems to ignore unreadable app manifests, so do the
-            # same here.
-            logger.warning(
-                "Skipping appmanifest %s due to insufficient permissions",
-                path
-            )
-            return None
-
-        try:
-            vdf_data = lower_dict(vdf.loads(content))
-        except SyntaxError:
-            logger.warning("Skipping malformed appmanifest %s", path)
-            return None
-
-        try:
-            app_state = vdf_data["appstate"]
-        except KeyError:
-            # Some appmanifest files may be empty. Ignore those.
-            logger.info("Skipping empty appmanifest %s", path)
+        app_state = _parse_appmanifest(path)
+        if not app_state:
             return None
 
         last_updated = int(app_state.get("lastupdated", 0))
-
-        # Try parsing 'stateflags' if it exists
-        try:
-            state_flags = int(app_state["stateflags"])
-
-            # Check if AppState flag StateUninstalled (1) is set, and
-            # skip parsing the rest of the appmanifest if so.
-            # See Lutris docs for rest of flags:
-            # https://github.com/lutris/lutris/blob/master/docs/steam.rst
-            # TODO: Maybe we should also check for StateFullyInstalled (4)?
-            if state_flags & 1:
-                logger.info("Appmanifest %s is uninstalled", path)
-                return None
-        except (KeyError, ValueError):
-            logger.debug(
-                "Could not parse 'StateFlags' for %s, "
-                "the field might be missing",
-                path
-            )
-            pass
 
         # The app ID field can be named 'appID' or 'appid'.
         # 'appid' is more common, but certain appmanifest
@@ -303,31 +254,7 @@ class SteamApp(object):
 
         # If Steam path was provided, also populate the icon path
         if steam_path:
-            # The icon path might be located in one of the two locations:
-            # 1. `<steam_path>/appcache/librarycache/<appid>/<40 hex chars>.jpg
-            # 2. `<steam_path>/appcache/librarycache/<appid>_icon.jpg`
-            #
-            # There doesn't appear to be any other way to determine which is
-            # used other than by checking. This incurs some I/O for each app.
-            icon_path = None
-            library_cache_path = steam_path / "appcache" / "librarycache"
-            try:
-                # Try 1st location. This appears to be the newest, so this
-                # should hopefully be the first match, at least on newer Steam
-                # installations.
-                app_lib_cache_path = library_cache_path / str(appid)
-
-                icon_path = next(
-                    path for path in app_lib_cache_path.iterdir()
-                    if re.match(r"[a-f0-9]{40}\.jpg", path.name)
-                )
-            except (StopIteration, FileNotFoundError):
-                # Try 2nd location
-                icon_path = library_cache_path / f"{appid}_icon.jpg"
-
-                if not icon_path.is_file():
-                    # No icon was found
-                    icon_path = None
+            icon_path = _get_icon_path(steam_path, appid)
 
         # Check if the app requires another app. This is the case with
         # newer versions of Proton, which use Steam Runtimes installed as
@@ -348,6 +275,100 @@ class SteamApp(object):
             last_updated=last_updated,
             required_tool_appid=required_tool_appid
         )
+
+
+def _parse_appmanifest(path):
+    """
+    Parse an appmanifest_X.acf file and return its appstate dictionary.
+    Returns None if the file is unreadable, malformed, or the app is uninstalled.
+    """
+    try:
+        content = path.read_text(encoding="utf-8")
+    except UnicodeDecodeError:
+        # This might occur if the appmanifest becomes corrupted
+        # eg. due to running a Linux filesystem under Windows
+        # In that case just skip it
+        logger.warning(
+            "Skipping malformed appmanifest %s", path
+        )
+        return None
+    except PermissionError:
+        # Skip the appmanifest if we can't read it.
+        # Steam also seems to ignore unreadable app manifests, so do the
+        # same here.
+        logger.warning(
+            "Skipping appmanifest %s due to insufficient permissions",
+            path
+        )
+        return None
+
+    try:
+        vdf_data = lower_dict(vdf.loads(content))
+    except SyntaxError:
+        logger.warning("Skipping malformed appmanifest %s", path)
+        return None
+
+    try:
+        app_state = vdf_data["appstate"]
+    except KeyError:
+        # Some appmanifest files may be empty. Ignore those.
+        logger.info("Skipping empty appmanifest %s", path)
+        return None
+
+    # Try parsing 'stateflags' if it exists
+    try:
+        state_flags = int(app_state["stateflags"])
+
+        # Check if AppState flag StateUninstalled (1) is set, and
+        # skip parsing the rest of the appmanifest if so.
+        # See Lutris docs for rest of flags:
+        # https://github.com/lutris/lutris/blob/master/docs/steam.rst
+        # TODO: Maybe we should also check for StateFullyInstalled (4)?
+        if state_flags & 1:
+            logger.info("Appmanifest %s is uninstalled", path)
+            return None
+    except (KeyError, ValueError):
+        logger.debug(
+            "Could not parse 'StateFlags' for %s, "
+            "the field might be missing",
+            path
+        )
+        pass
+
+    return app_state
+
+
+def _get_icon_path(steam_path, appid):
+    """
+    Locate the icon path for the given appid in Steam's library cache.
+    Returns the Path to the icon if found, otherwise None.
+    """
+    # The icon path might be located in one of the two locations:
+    # 1. `<steam_path>/appcache/librarycache/<appid>/<40 hex chars>.jpg
+    # 2. `<steam_path>/appcache/librarycache/<appid>_icon.jpg`
+    #
+    # There doesn't appear to be any other way to determine which is
+    # used other than by checking. This incurs some I/O for each app.
+    library_cache_path = steam_path / "appcache" / "librarycache"
+    try:
+        # Try 1st location. This appears to be the newest, so this
+        # should hopefully be the first match, at least on newer Steam
+        # installations.
+        app_lib_cache_path = library_cache_path / str(appid)
+
+        return next(
+            path for path in app_lib_cache_path.iterdir()
+            if re.match(r"[a-f0-9]{40}\.jpg", path.name)
+        )
+    except (StopIteration, FileNotFoundError):
+        # Try 2nd location
+        icon_path = library_cache_path / f"{appid}_icon.jpg"
+
+        if icon_path.is_file():
+            return icon_path
+
+        # No icon was found
+        return None
 
 
 def _get_required_tool_appid(path):
