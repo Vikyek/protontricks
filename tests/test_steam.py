@@ -1,10 +1,10 @@
 import os
 import shutil
 import time
-from pathlib import Path
-
 import pytest
 import vdf
+from pathlib import Path
+
 
 from protontricks.steam import (SteamApp, _get_steamapps_subdirs,
                                 find_appid_proton_prefix,
@@ -1387,3 +1387,257 @@ def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
 
     assert len(steamapps_dirs) == 4
     assert steamapps_dirs[0].name == "steamapps"
+
+class TestGetCustomCompatToolInstallationsInDir:
+    def test_nonexistent_dir(self, tmp_path):
+        """
+        Return an empty list if the directory does not exist
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        assert get_custom_compat_tool_installations_in_dir(
+            tmp_path / "nonexistent"
+        ) == []
+
+    def test_empty_dir(self, tmp_path):
+        """
+        Return an empty list if the directory exists but is empty
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        assert get_custom_compat_tool_installations_in_dir(tmp_path) == []
+
+    def test_valid_tool_in_subdir(self, custom_proton_factory, steam_dir):
+        """
+        Find tool with `compatibilitytool.vdf` inside a subdirectory
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+
+        compat_tool_dir = steam_dir.parent / "root" / "compatibilitytools.d"
+        compat_tool_dir.mkdir(parents=True, exist_ok=True)
+        # Create a custom Proton in steam_dir
+        custom_proton_factory(name="Subdir Proton")
+
+        apps = get_custom_compat_tool_installations_in_dir(compat_tool_dir)
+        assert len(apps) == 1
+        assert apps[0].name == "Subdir Proton"
+        assert apps[0].install_path == compat_tool_dir / "Subdir Proton"
+
+    def test_valid_tool_in_root(self, tmp_path):
+        """
+        Find tool with `*.vdf` in the root of the directory
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        (tmp_path / "tool").mkdir()
+        vdf_path = tmp_path / "root_tool.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Root Proton": {
+                            "install_path": "tool",
+                            "display_name": "Root Proton",
+                            "from_oslist": "windows",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert len(apps) == 1
+        assert apps[0].name == "Root Proton"
+        assert apps[0].install_path == tmp_path / "tool"
+
+    def test_syntax_error(self, tmp_path):
+        """
+        Ignore VDF files with syntax errors
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        vdf_path = tmp_path / "bad.vdf"
+        vdf_path.write_text('"invalid vdf"')
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert apps == []
+
+    def test_empty_vdf(self, tmp_path):
+        """
+        Ignore VDF files that are empty
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        vdf_path = tmp_path / "empty.vdf"
+        vdf_path.write_text("")
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert apps == []
+
+    def test_missing_keys(self, tmp_path):
+        """
+        Ignore VDF files with missing required keys
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        vdf_path = tmp_path / "missing.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Missing Proton": {
+                            # Missing install_path, etc.
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert apps == []
+
+    def test_invalid_oslist(self, tmp_path):
+        """
+        Ignore tools with invalid `from_oslist` or `to_oslist`
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        vdf_path = tmp_path / "invalid_os.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Invalid OS Proton": {
+                            "install_path": ".",
+                            "display_name": "Invalid OS Proton",
+                            "from_oslist": "mac",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert apps == []
+
+    def test_absolute_install_path(self, tmp_path):
+        """
+        Handle an absolute `install_path`
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        tool_dir = tmp_path / "absolute_tool"
+        tool_dir.mkdir()
+
+        vdf_path = tmp_path / "absolute.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Absolute Proton": {
+                            "install_path": str(tool_dir),
+                            "display_name": "Absolute Proton",
+                            "from_oslist": "windows",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert len(apps) == 1
+        assert apps[0].name == "Absolute Proton"
+        assert apps[0].install_path == tool_dir
+
+    def test_relative_dot_install_path(self, tmp_path):
+        """
+        Handle a relative `.` `install_path` when the VDF is in a subdirectory
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        subdir = tmp_path / "tool_subdir"
+        subdir.mkdir()
+        vdf_path = subdir / "compatibilitytool.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Dot Proton": {
+                            "install_path": ".",
+                            "display_name": "Dot Proton",
+                            "from_oslist": "windows",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert len(apps) == 1
+        assert apps[0].name == "Dot Proton"
+        assert apps[0].install_path == subdir
+
+    def test_required_tool_appid(self, tmp_path):
+        """
+        Handle a tool that requires another app ID
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        tool_dir = tmp_path / "required_tool"
+        tool_dir.mkdir()
+
+        manifest_path = tool_dir / "toolmanifest.vdf"
+        manifest_path.write_text(
+            vdf.dumps({
+                "manifest": {
+                    "require_tool_appid": 123456
+                }
+            })
+        )
+
+        vdf_path = tmp_path / "required.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Required Proton": {
+                            "install_path": "required_tool",
+                            "display_name": "Required Proton",
+                            "from_oslist": "windows",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert len(apps) == 1
+        assert apps[0].name == "Required Proton"
+        assert apps[0].install_path == tool_dir
+        assert apps[0].required_tool_appid == 123456
+
+    def test_corrupt_toolmanifest(self, tmp_path):
+        """
+        Ignore tools with corrupted `toolmanifest.vdf`
+        """
+        from protontricks.steam import get_custom_compat_tool_installations_in_dir
+        tool_dir = tmp_path / "corrupt_tool"
+        tool_dir.mkdir()
+
+        manifest_path = tool_dir / "toolmanifest.vdf"
+        # vdf.loads('\"invalid vdf\"') throws SyntaxError
+        manifest_path.write_text('"invalid vdf"')
+
+        vdf_path = tmp_path / "corrupt.vdf"
+        vdf_path.write_text(
+            vdf.dumps({
+                "compatibilitytools": {
+                    "compat_tools": {
+                        "Corrupt Proton": {
+                            "install_path": "corrupt_tool",
+                            "display_name": "Corrupt Proton",
+                            "from_oslist": "windows",
+                            "to_oslist": "linux"
+                        }
+                    }
+                }
+            })
+        )
+
+        apps = get_custom_compat_tool_installations_in_dir(tmp_path)
+        assert apps == []
