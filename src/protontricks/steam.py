@@ -1214,6 +1214,99 @@ def get_compat_tool_dirs(steam_root):
     return paths
 
 
+def _parse_custom_compat_tool_manifest(vdf_path, compat_tool_dir):
+    """
+    Parse a custom compatibility tool manifest and return a SteamApp object
+    or None if the manifest is invalid or missing required keys.
+    """
+    content = vdf_path.read_text()
+
+    logger.debug(
+        "Parsing custom compatibility tool manifest at %s", vdf_path
+    )
+
+    try:
+        vdf_data = vdf.loads(content)
+    except SyntaxError:
+        logger.warning(
+            "Compatibility tool declaration at %s is corrupted. You may "
+            "need to reinstall the application.",
+            vdf_path
+        )
+        return None
+
+    if not vdf_data:
+        logger.warning(
+            "Compatibility tool declaration at %s is empty. You may need "
+            "to reinstall the application.",
+            vdf_path
+        )
+        return None
+
+    # Traverse to 'compatibilitytools/compat_tools' in a case-insensitive
+    # way. This is done because we can't turn all keys recursively to
+    # lowercase from the get-go; the app name is stored as a key.
+    try:
+        compat_tools = {k.lower(): v for k, v in vdf_data.items()}
+        compat_tools = compat_tools["compatibilitytools"]
+        compat_tools = {
+            k.lower(): v for k, v in compat_tools.items()
+        }
+        compat_tools = compat_tools["compat_tools"]
+        internal_name = list(compat_tools.keys())[0]
+        tool_info = compat_tools[internal_name]
+
+        # We can now convert the remainder into lowercase
+        tool_info = lower_dict(tool_info)
+
+        install_path_name = tool_info["install_path"]
+        from_oslist = tool_info["from_oslist"]
+        to_oslist = tool_info["to_oslist"]
+    except KeyError:
+        logger.warning(
+            "Compatibility tool declaration at %s is incomplete. You may "
+            "need to reinstall the application",
+            vdf_path
+        )
+        return None
+
+    if from_oslist != "windows" or to_oslist != "linux":
+        return None
+
+    # Installation path can be relative or absolute if the VDF was in
+    # 'compatibilitytools.d/'
+    # or '.' if the VDF was in 'compatibilitytools.d/TOOL_NAME'
+    if install_path_name == ".":
+        install_path = vdf_path.parent
+    elif install_path_name.startswith("/"):
+        install_path = Path(install_path_name)
+    else:
+        install_path = compat_tool_dir / install_path_name
+
+    # Check if the app requires another app. This is the case with
+    # newer versions of Proton, which use Steam Runtimes installed as
+    # normal Steam apps
+    try:
+        required_tool_appid = _get_required_tool_appid(install_path)
+    except (ValueError, SyntaxError):
+        logger.warning(
+            "Tool manifest for %s is empty or corrupted. You may need to "
+            "reinstall the application.",
+            install_path.name
+        )
+        return None
+
+    logger.debug(
+        "Found custom compatibility tool %s at %s",
+        internal_name, install_path
+    )
+
+    return SteamApp(
+        name=internal_name, install_path=install_path,
+        required_tool_appid=required_tool_appid
+    )
+
+
 def get_custom_compat_tool_installations_in_dir(compat_tool_dir):
     """
     Return a list of custom compatibility tools in the given directory
@@ -1230,94 +1323,9 @@ def get_custom_compat_tool_installations_in_dir(compat_tool_dir):
     custom_tool_apps = []
 
     for vdf_path in comptool_files:
-        content = vdf_path.read_text()
-
-        logger.debug(
-            "Parsing custom compatibility tool manifest at %s", vdf_path
-        )
-
-        try:
-            vdf_data = vdf.loads(content)
-        except SyntaxError:
-            logger.warning(
-                "Compatibility tool declaration at %s is corrupted. You may "
-                "need to reinstall the application.",
-                vdf_path
-            )
-            continue
-
-        if not vdf_data:
-            logger.warning(
-                "Compatibility tool declaration at %s is empty. You may need "
-                "to reinstall the application.",
-                vdf_path
-            )
-            continue
-
-        # Traverse to 'compatibilitytools/compat_tools' in a case-insensitive
-        # way. This is done because we can't turn all keys recursively to
-        # lowercase from the get-go; the app name is stored as a key.
-        try:
-            compat_tools = {k.lower(): v for k, v in vdf_data.items()}
-            compat_tools = compat_tools["compatibilitytools"]
-            compat_tools = {
-                k.lower(): v for k, v in compat_tools.items()
-            }
-            compat_tools = compat_tools["compat_tools"]
-            internal_name = list(compat_tools.keys())[0]
-            tool_info = compat_tools[internal_name]
-
-            # We can now convert the remainder into lowercase
-            tool_info = lower_dict(tool_info)
-
-            install_path_name = tool_info["install_path"]
-            from_oslist = tool_info["from_oslist"]
-            to_oslist = tool_info["to_oslist"]
-        except KeyError:
-            logger.warning(
-                "Compatibility tool declaration at %s is incomplete. You may "
-                "need to reinstall the application",
-                vdf_path
-            )
-            continue
-
-        if from_oslist != "windows" or to_oslist != "linux":
-            continue
-
-        # Installation path can be relative or absolute if the VDF was in
-        # 'compatibilitytools.d/'
-        # or '.' if the VDF was in 'compatibilitytools.d/TOOL_NAME'
-        if install_path_name == ".":
-            install_path = vdf_path.parent
-        elif install_path_name[0] == "/":
-            install_path = Path(install_path_name)
-        else:
-            install_path = compat_tool_dir / install_path_name
-
-        # Check if the app requires another app. This is the case with
-        # newer versions of Proton, which use Steam Runtimes installed as
-        # normal Steam apps
-        try:
-            required_tool_appid = _get_required_tool_appid(install_path)
-        except (ValueError, SyntaxError):
-            logger.warning(
-                "Tool manifest for %s is empty or corrupted. You may need to "
-                "reinstall the application.",
-                install_path.name
-            )
-            continue
-
-        logger.debug(
-            "Found custom compatibility tool %s at %s",
-            internal_name, install_path
-        )
-
-        custom_tool_apps.append(
-            SteamApp(
-                name=internal_name, install_path=install_path,
-                required_tool_appid=required_tool_appid
-            )
-        )
+        app = _parse_custom_compat_tool_manifest(vdf_path, compat_tool_dir)
+        if app:
+            custom_tool_apps.append(app)
 
     return custom_tool_apps
 
