@@ -29,7 +29,7 @@ class RunEnv:
     legacy_steam_runtime_path: Optional[Any] = None
     use_bwrap: Optional[bool] = None
     start_wineserver: Optional[bool] = None
-    env: Optional[Dict[str, str]] = field(default_factory=dict)
+    env: Dict[str, str] = field(default_factory=dict)
 
 SUPPORTED_STEAM_RUNTIMES = [
     # Old names
