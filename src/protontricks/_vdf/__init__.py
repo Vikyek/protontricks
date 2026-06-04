@@ -458,8 +458,11 @@ def binary_dump(obj, fp, alt_format=False):
     if not hasattr(fp, 'write'):
         raise TypeError("Expected fp to have write() method")
 
-    for chunk in _binary_dump_gen(obj, alt_format=alt_format):
-        fp.write(chunk)
+    if hasattr(fp, 'writelines'):
+        fp.writelines(_binary_dump_gen(obj, alt_format=alt_format))
+    else:
+        for chunk in _binary_dump_gen(obj, alt_format=alt_format):
+            fp.write(chunk)
 
 def _binary_dump_gen(obj, level=0, alt_format=False):
     if level == 0 and len(obj) == 0:
