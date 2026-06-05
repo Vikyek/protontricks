@@ -9,6 +9,7 @@
 
 import argparse
 import logging
+import shlex
 import sys
 from collections import defaultdict
 
@@ -106,7 +107,7 @@ def main(args=None, steam_path=None, steam_root=None):
         "-c", "--command", type=str, dest="command",
         required=False,
         help="Run a command with Wine-related environment variables set. "
-             "The command is passed to the shell as-is without being escaped.")
+             "The command is parsed and executed without a shell.")
     parser.add_argument(
         "--gui", action="store_true",
         help="Launch the Protontricks GUI.")
@@ -229,14 +230,11 @@ class RunCustomCommand(BaseCommand):
             winetricks_path=self.winetricks_path,
             proton_app=self.proton_app,
             steam_app=self.steam_app,
-            command=self.cli_args.command,
+            command=shlex.split(self.cli_args.command),
             use_steam_runtime=self.use_steam_runtime,
             legacy_steam_runtime_path=self.legacy_steam_runtime_path,
             use_bwrap=self.use_bwrap,
             start_wineserver=self.start_background_wineserver,
-            # Pass the command directly into the shell *without*
-            # escaping it
-            shell=True,
             cwd=cwd
         )
 

@@ -364,8 +364,11 @@ class TestCLIRun:
         Run a command that returns a specific exit code and ensure it is
         returned
         """
+        import os
         steam_app_factory(name="Fake game", appid=10)
-        cli(["-c", "exit 5", "10"], expect_returncode=5)
+        import sys
+        # We use a command that exists and returns a specific code
+        cli(["-c", f"{sys.executable} -c \"import sys; sys.exit(5)\"", "10"], expect_returncode=5)
 
     def test_run_multiple_command_mock(self, cli):
         """
@@ -833,9 +836,9 @@ class TestCLICommand:
         command = command_mock.commands[-1]
 
         # The command is just 'bash'
-        assert command.args == "bash"
+        assert command.args == ["bash"]
         assert command.cwd is None
-        assert command.shell is True
+        assert command.shell is False
 
         # Correct environment vars were set
         assert command.env["WINE"] == str(
@@ -870,7 +873,7 @@ class TestCLICommand:
         command = command_mock.commands[-1]
 
         # The command is just 'bash'
-        assert command.args == "bash"
+        assert command.args == ["bash"]
 
         assert "WINETRICKS" not in command.env
 
@@ -887,7 +890,7 @@ class TestCLICommand:
 
         command = command_mock.commands[-1]
 
-        assert command.args == "bash"
+        assert command.args == ["bash"]
         assert command.cwd == str(steam_app.install_path)
 
 
