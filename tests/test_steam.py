@@ -12,7 +12,8 @@ from protontricks.steam import (SteamApp, _get_steamapps_subdirs,
                                 find_steam_installations, find_steam_path,
                                 get_custom_compat_tool_installations,
                                 get_custom_windows_shortcuts, get_steam_apps,
-                                get_steam_lib_paths, iter_appinfo_sections)
+                                get_steam_lib_paths, iter_appinfo_sections,
+                                get_appinfo_sections)
 
 
 class TestSteamApp:
@@ -1368,6 +1369,25 @@ def test_parse_appinfo_v29():
 
     assert app_sections[0]["appinfo"]["appid"] == 5
     assert app_sections[1]["appinfo"]["appid"] == 10
+
+
+def test_get_appinfo_sections(monkeypatch):
+    """
+    Test get_appinfo_sections converts iter_appinfo_sections output to a list
+    """
+    mock_sections = [{"appinfo": {"appid": 1}}, {"appinfo": {"appid": 2}}]
+
+    def mock_iter_appinfo_sections(path):
+        return iter(mock_sections)
+
+    monkeypatch.setattr(
+        "protontricks.steam.iter_appinfo_sections",
+        mock_iter_appinfo_sections
+    )
+
+    result = get_appinfo_sections("dummy/path")
+    assert result == mock_sections
+    assert isinstance(result, list)
 
 
 def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
