@@ -178,7 +178,7 @@ def exit_with_error(error, desktop=False):
     show_text_dialog(
         title="Protontricks",
         text=message,
-        window_icon=error
+        window_icon="error"
     )
     sys.exit(1)
 
