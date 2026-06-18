@@ -541,7 +541,7 @@ def find_legacy_steam_runtime_path(steam_root):
 
         try:
             steam_runtime_path = next(
-                path for path in paths if (path / "run.sh").exists()
+                path for path in paths if (path / "run.sh").is_file()
             )
             logger.info(
                 "Using default Steam Runtime at %s", str(steam_runtime_path))
