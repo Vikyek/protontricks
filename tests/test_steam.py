@@ -1376,8 +1376,11 @@ def test_get_appinfo_sections(monkeypatch):
     Test get_appinfo_sections converts iter_appinfo_sections output to a list
     """
     mock_sections = [{"appinfo": {"appid": 1}}, {"appinfo": {"appid": 2}}]
+    captured_path = None
 
     def mock_iter_appinfo_sections(path):
+        nonlocal captured_path
+        captured_path = path
         return iter(mock_sections)
 
     monkeypatch.setattr(
@@ -1385,9 +1388,11 @@ def test_get_appinfo_sections(monkeypatch):
         mock_iter_appinfo_sections
     )
 
-    result = get_appinfo_sections("dummy/path")
+    test_path = "dummy/path"
+    result = get_appinfo_sections(test_path)
     assert result == mock_sections
     assert isinstance(result, list)
+    assert captured_path == test_path
 
 
 def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
