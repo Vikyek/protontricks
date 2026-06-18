@@ -295,7 +295,6 @@ BIN_END         = b'\x08'
 BIN_INT64       = b'\x0A'
 BIN_END_ALT     = b'\x0B'
 
-# pylint: disable=too-many-arguments
 def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=True):
     """
     Deserialize ``b`` (``bytes`` containing a VDF in "binary form")
@@ -319,7 +318,6 @@ def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
 
     return binary_load(BytesIO(b), mapper, merge_duplicate_keys, alt_format, key_table, raise_on_remaining)
 
-# pylint: disable=too-many-arguments
 def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=False):
     """
     Deserialize ``fp`` (a ``.read()``-supporting file-like object containing
@@ -355,6 +353,7 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
         offset = fp.tell()
         terminator = b'\x00\x00' if wide else b'\x00'
         term_len = len(terminator)
+        assert term_len in (1, 2), f"Unsupported terminator length: {term_len}"
         total_len = 0
         tail = b''
 
@@ -374,7 +373,12 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
                 end = total_len - len(tail) + chunk_end
 
             total_len += len(chunk)
-            tail = chunk[-(term_len - 1):] if term_len > 1 else b''
+            # Only support cross-chunk matching for known 2-byte terminators.
+            # For single-byte terminators no tail is needed.
+            if term_len == 2:
+                tail = chunk[-1:]
+            else:
+                tail = b''
 
         buf = b''.join(chunks)
 
