@@ -295,7 +295,47 @@ BIN_END         = b'\x08'
 BIN_INT64       = b'\x0A'
 BIN_END_ALT     = b'\x0B'
 
-# pylint: disable=too-many-arguments
+# binary struct definitions
+_int32 = struct.Struct('<i')
+_uint64 = struct.Struct('<Q')
+_int64 = struct.Struct('<q')
+_float32 = struct.Struct('<f')
+
+def _read_string(fp, wide=False):
+    buf, end = b'', -1
+    offset = fp.tell()
+
+    # locate string end
+    while end == -1:
+        chunk = fp.read(64)
+
+        if chunk == b'':
+            raise SyntaxError("Unterminated cstring (offset: %d)" % offset)
+
+        buf += chunk
+        end = buf.find(b'\x00\x00' if wide else b'\x00')
+
+    if wide:
+        end += end % 2
+
+    # rewind fp
+    fp.seek(end - len(buf) + (2 if wide else 1), 1)
+
+    # decode string
+    result = buf[:end]
+
+    if wide:
+        result = result.decode('utf-16')
+    elif bytes is not str:
+        result = result.decode('utf-8', 'replace')
+    else:
+        try:
+            result.decode('ascii')
+        except UnicodeDecodeError:
+            result = result.decode('utf-8', 'replace')
+
+    return result
+
 def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=True):
     """
     Deserialize ``b`` (``bytes`` containing a VDF in "binary form")
@@ -319,7 +359,6 @@ def binary_loads(b, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
 
     return binary_load(BytesIO(b), mapper, merge_duplicate_keys, alt_format, key_table, raise_on_remaining)
 
-# pylint: disable=too-many-arguments
 def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, key_table=None, raise_on_remaining=False):
     """
     Deserialize ``fp`` (a ``.read()``-supporting file-like object containing
@@ -384,7 +423,7 @@ def binary_load(fp, mapper=dict, merge_duplicate_keys=True, alt_format=False, ke
 
             stack[-1][key] = val
         elif t == BIN_UINT64:
-            stack[-1][key] = UINT_64(_uint64.unpack(fp.read(_int64.size))[0])
+            stack[-1][key] = UINT_64(_uint64.unpack(fp.read(_uint64.size))[0])
         elif t == BIN_INT64:
             stack[-1][key] = INT_64(_int64.unpack(fp.read(_int64.size))[0])
         elif t == BIN_FLOAT32:
