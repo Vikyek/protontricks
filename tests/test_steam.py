@@ -1,6 +1,7 @@
 import os
 import shutil
 import time
+import logging
 from pathlib import Path
 
 import pytest
@@ -275,16 +276,47 @@ class TestFindProtonApp:
 
         monkeypatch.setenv("PROTON_VERSION", "Proton 4.20")
 
-        proton_app = find_proton_app(
-            steam_path=steam_dir,
-            steam_apps=[default_proton, custom_proton],
-            appid=10
-        )
+        with caplog.at_level(logging.INFO):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[default_proton, custom_proton],
+                appid=10
+            )
 
         assert proton_app.name == "Proton 4.20"
         assert "Found requested Proton version: Proton 4.20" in [
             r.message for r in caplog.records
         ]
+
+    def test_find_proton_app_with_env_var_not_found_no_fallback(
+            self, steam_app_factory, steam_dir, default_proton, proton_factory,
+            monkeypatch, caplog):
+        """
+        Check that find_proton_app returns None when PROTON_VERSION is set to a
+        nonexistent app, even if there is a valid fallback compat tool available.
+        """
+        custom_proton = proton_factory(
+            name="Proton 6.66", appid=54440, compat_tool_name="proton_6_66"
+        )
+        steam_app_factory(
+            name="Fake game", appid=10,
+            compat_tool_name="proton_6_66"
+        )
+
+        monkeypatch.setenv("PROTON_VERSION", "Proton Nonexistent")
+
+        with caplog.at_level(logging.ERROR):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[default_proton, custom_proton],
+                appid=10
+            )
+
+        assert proton_app is None
+        assert any(
+            "$PROTON_VERSION was set but matching Proton installation could not be found."
+            in r.message for r in caplog.records
+        )
 
     def test_find_proton_app_with_env_var_not_found(
             self, steam_app_factory, steam_dir, default_proton,
@@ -299,11 +331,12 @@ class TestFindProtonApp:
 
         monkeypatch.setenv("PROTON_VERSION", "Proton Nonexistent")
 
-        proton_app = find_proton_app(
-            steam_path=steam_dir,
-            steam_apps=[default_proton],
-            appid=10
-        )
+        with caplog.at_level(logging.ERROR):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[default_proton],
+                appid=10
+            )
 
         assert proton_app is None
         assert any(
@@ -326,11 +359,12 @@ class TestFindProtonApp:
             compat_tool_name="proton_6_66"
         )
 
-        proton_app = find_proton_app(
-            steam_path=steam_dir,
-            steam_apps=[default_proton, custom_proton],
-            appid=10
-        )
+        with caplog.at_level(logging.INFO):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[default_proton, custom_proton],
+                appid=10
+            )
 
         assert proton_app.name == "Proton 6.66"
         assert any(
@@ -362,11 +396,12 @@ class TestFindProtonApp:
             })
         )
 
-        proton_app = find_proton_app(
-            steam_path=steam_dir,
-            steam_apps=[],
-            appid=10
-        )
+        with caplog.at_level(logging.ERROR):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[],
+                appid=10
+            )
 
         assert proton_app is None
         assert any(
@@ -404,11 +439,12 @@ class TestFindProtonApp:
             })
         )
 
-        proton_app = find_proton_app(
-            steam_path=steam_dir,
-            steam_apps=[steam_app],
-            appid=10
-        )
+        with caplog.at_level(logging.ERROR):
+            proton_app = find_proton_app(
+                steam_path=steam_dir,
+                steam_apps=[steam_app],
+                appid=10
+            )
 
         assert proton_app is None
         assert any(
