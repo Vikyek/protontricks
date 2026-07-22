@@ -1,11 +1,11 @@
 import stat
-import textwrap
 from pathlib import Path
 
 import pytest
 
-from protontricks.util import (create_wine_bin_dir, is_steam_deck, is_steamos,
-                               lower_dict, run_command)
+from protontricks.util import (create_wine_bin_dir,
+                               get_host_library_paths, is_steam_deck,
+                               is_steamos, lower_dict, run_command)
 
 
 def get_files_in_dir(d):
@@ -301,8 +301,6 @@ class TestRunCommand:
         # User-set env var is not overridden
         assert command.env["WINE_LARGE_ADDRESS_AWARE"] == "2"
 
-
-
     def test_bwrap_launcher_crash_detected(
             self, default_new_proton, steam_app_factory, command_mock):
         """
@@ -399,3 +397,30 @@ class TestIsSteamOSOrDeck:
     @pytest.mark.usefixtures("steam_deck")
     def test_is_steamos(self):
         assert is_steamos()
+
+
+class TestGetHostLibraryPaths:
+    def test_get_host_library_paths(self, monkeypatch):
+        """
+        Test that get_host_library_paths correctly parses ldconfig output
+        """
+        # pylint: disable=import-outside-toplevel
+        from subprocess import CompletedProcess
+
+        # pylint: disable=unused-argument
+        def mock_run(*args, **kwargs):
+            return CompletedProcess(
+                args=args,
+                returncode=0,
+                stdout=b"""/usr/lib: (from /etc/ld.so.conf.d/libc.conf)
+\tlibc.so.6 -> libc-2.31.so
+/lib: (from /etc/ld.so.conf.d/libc.conf)
+/usr/lib32:
+relative/path:
+/no_colon_path"""
+            )
+
+        monkeypatch.setattr("protontricks.util.run", mock_run)
+
+        paths = get_host_library_paths()
+        assert paths == "/usr/lib:/lib:/usr/lib32"
