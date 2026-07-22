@@ -3,7 +3,8 @@ import pytest
 from pathlib import Path
 
 from protontricks.flatpak import (get_inaccessible_paths,
-                                  get_running_flatpak_version)
+                                  get_running_flatpak_version,
+                                  is_flatpak_sandbox)
 
 
 class TestGetRunningFlatpakVersion:
@@ -222,3 +223,25 @@ class TestGetInaccessiblePaths:
         assert records[0].levelname == "WARNING"
         assert "Unknown Flatpak file system permission 'unknown-fs'" \
             in records[0].message
+
+
+class TestIsFlatpakSandbox:
+    def test_flatpak_not_active(self, monkeypatch):
+        """
+        Test that is_flatpak_sandbox returns False when Flatpak is not active
+        """
+        monkeypatch.setattr(
+            "protontricks.flatpak.get_running_flatpak_version",
+            lambda: None
+        )
+        assert is_flatpak_sandbox() is False
+
+    def test_flatpak_active(self, monkeypatch):
+        """
+        Test that is_flatpak_sandbox returns True when Flatpak is active
+        """
+        monkeypatch.setattr(
+            "protontricks.flatpak.get_running_flatpak_version",
+            lambda: (1, 12, 1)
+        )
+        assert is_flatpak_sandbox() is True
