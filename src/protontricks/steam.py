@@ -259,9 +259,10 @@ class SteamApp(object):
             # skip parsing the rest of the appmanifest if so.
             # See Lutris docs for rest of flags:
             # https://github.com/lutris/lutris/blob/master/docs/steam.rst
-            # TODO: Maybe we should also check for StateFullyInstalled (4)?
-            if state_flags & 1:
-                logger.info("Appmanifest %s is uninstalled", path)
+            # Additionally, check if StateFullyInstalled (4) is NOT set,
+            # as this also means the app is not currently available.
+            if state_flags & 1 or not (state_flags & 4):
+                logger.info("Appmanifest %s is not fully installed", path)
                 return None
         except (KeyError, ValueError):
             logger.debug(

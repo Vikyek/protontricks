@@ -34,6 +34,47 @@ class TestSteamApp:
         assert steam_app.appid == 10
         assert not steam_app.icon_path
 
+    @pytest.mark.parametrize("state_flags", [1, 2, 8, 34, 66])
+    def test_steam_app_from_appmanifest_not_fully_installed(
+            self, steam_app_factory, steam_dir, state_flags):
+        """
+        Check that SteamApp isn't created if the app is uninstalled (flag 1)
+        or not fully installed (missing flag 4)
+        """
+        steam_app = steam_app_factory(
+            name="Fake game", appid=10, state_flags=state_flags
+        )
+
+        appmanifest_path = \
+            Path(steam_app.install_path).parent.parent / "appmanifest_10.acf"
+
+        assert not SteamApp.from_appmanifest(
+            path=appmanifest_path,
+            steam_lib_paths=[steam_dir / "steam" / "steamapps"]
+        )
+
+    @pytest.mark.parametrize("state_flags", [4, 6, 36, 68])
+    def test_steam_app_from_appmanifest_fully_installed(
+            self, steam_app_factory, steam_dir, state_flags):
+        """
+        Check that SteamApp is created if the app is fully installed (flag 4 is set)
+        and not uninstalled (flag 1 is not set)
+        """
+        steam_app = steam_app_factory(
+            name="Fake game", appid=10, state_flags=state_flags
+        )
+
+        appmanifest_path = \
+            Path(steam_app.install_path).parent.parent / "appmanifest_10.acf"
+
+        app = SteamApp.from_appmanifest(
+            path=appmanifest_path,
+            steam_lib_paths=[steam_dir / "steam" / "steamapps"]
+        )
+        assert app is not None
+        assert app.appid == 10
+
+
     def test_steam_app_from_appmanifest_and_steam_path(
             self, steam_app_factory, steam_dir):
         """

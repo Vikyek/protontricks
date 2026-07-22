@@ -491,7 +491,7 @@ def steam_app_factory(steam_dir, steam_config_path):
     def func(
             name, appid, compat_tool_name=None, steam_dir=None,
             library_dir=None, add_prefix=True, required_tool_app=None,
-            last_updated=0):
+            last_updated=0, state_flags=None):
         if not steam_dir:
             steam_dir = steam_dir_fx
 
@@ -512,14 +512,19 @@ def steam_app_factory(steam_dir, steam_config_path):
                 })
             )
 
+        app_state = {
+            "appid": str(appid),
+            "name": name,
+            "installdir": name,
+            "LastUpdated": last_updated
+        }
+
+        if state_flags is not None:
+            app_state["StateFlags"] = str(state_flags)
+
         (steamapps_dir / f"appmanifest_{appid}.acf").write_text(
             vdf.dumps({
-                "AppState": {
-                    "appid": str(appid),
-                    "name": name,
-                    "installdir": name,
-                    "LastUpdated": last_updated
-                }
+                "AppState": app_state
             })
         )
 
@@ -574,7 +579,7 @@ def proton_factory(
     def func(
             name, appid, compat_tool_name, is_default_proton=True,
             library_dir=None, required_tool_app=None, aliases=None,
-            last_updated=0):
+            last_updated=0, state_flags=None):
         if not aliases:
             aliases = []
 
