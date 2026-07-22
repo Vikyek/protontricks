@@ -1529,21 +1529,22 @@ def _filter_duplicate_apps(steam_apps):
     appid2app = defaultdict(list)
 
     for steam_app in steam_apps:
-        # Ignore apps without app IDs (eg. external compatibility tools)
-        # TODO: Also deduplicate custom compatibility tools
-        if not steam_app.appid:
-            appid2app[None].append(steam_app)
-            continue
-
-        app_list = appid2app[steam_app.appid]
+        # Deduplicate both regular Steam apps and custom compatibility tools.
+        # Custom compatibility tools don't have an app ID, so we use their
+        # name as the fallback key.
+        key = steam_app.appid if steam_app.appid else steam_app.name
+        app_list = appid2app[key]
         app_list.append(steam_app)
 
         if len(app_list) > 1:
-            app_list.sort(key=lambda app: app.last_updated, reverse=True)
+            app_list.sort(
+                key=lambda app: app.last_updated or 0,
+                reverse=True
+            )
             older_app = app_list.pop()
 
             logger.warning(
-                "Ignoring duplicate app %s in %s with older update time %d",
+                "Ignoring duplicate app %s in %s with older update time %s",
                 older_app.name, older_app.install_path,
                 older_app.last_updated
             )
