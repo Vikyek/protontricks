@@ -16,14 +16,20 @@ from ..util import is_steam_deck, is_steamos
 from .. import __version__
 
 
+_LOG_FILE_PATHS = {}
+
+
 def _get_log_file_path():
     """
     Get the log file path to use for this Protontricks process.
     """
-    temp_dir = tempfile.gettempdir()
-
     pid = os.getpid()
-    return Path(temp_dir) / f"protontricks{pid}.log"
+    if pid not in _LOG_FILE_PATHS:
+        fd, path = tempfile.mkstemp(prefix="protontricks-", suffix=".log")
+        # We only need the path, so close the file descriptor immediately
+        os.close(fd)
+        _LOG_FILE_PATHS[pid] = Path(path)
+    return _LOG_FILE_PATHS[pid]
 
 
 def _delete_log_file():
