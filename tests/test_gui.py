@@ -1,3 +1,4 @@
+from protontricks.gui import show_text_dialog, DialogOptions
 import contextlib
 import shutil
 from subprocess import CalledProcessError
@@ -132,8 +133,11 @@ class TestSelectApp:
 
         assert b"librarycache/10_icon.jpg\nFake game 1" in input_
         assert b"icon_placeholder.png\nFake game 2" in input_
-        assert b"librarycache/30/ffffffffffffffffffffffffffffffffffffffff.jpg\nFake game 3" \
+        assert (
+            b"librarycache/30/" +
+            b"ffffffffffffffffffffffffffffffffffffffff.jpg\nFake game 3"
             in input_
+        )
 
     def test_select_game_icons_ensure_resize(
             self, gui_provider, steam_app_factory, steam_dir, home_dir):
@@ -171,7 +175,7 @@ class TestSelectApp:
             assert img.size == (32, 32)
 
     def test_select_game_unidentifiable_icon_skipped(
-            self, gui_provider, steam_app_factory, steam_dir, home_dir, caplog):
+            self, gui_provider, steam_app_factory, steam_dir, home_dir, caplog):  # noqa: E501
         """
         Select a game using the GUI. Ensure a custom icon that's not
         identifiable by Pillow is skipped.
@@ -476,3 +480,67 @@ class TestPromptFilesystemAccess:
         assert "/mnt/fake_SSD " not in input_
         assert "/mnt/fake_SSD_2" not in input_
         assert "/mnt/fake_SSD_3" in input_
+
+
+def test_show_text_dialog_yad(gui_provider, monkeypatch):
+    monkeypatch.setattr("protontricks.gui.get_gui_provider", lambda: "yad")
+    gui_provider.returncode = 0
+
+    result = show_text_dialog(
+        title="Test Title",
+        text="Test Text",
+        window_icon="wine",
+        options=DialogOptions(width=100, height=200, ok_label="Accept",
+                              cancel_label="Reject", add_cancel_button=True)
+    )
+
+    assert result is True
+    assert gui_provider.args == [
+        "yad", "--text-info", "--window-icon", "wine",
+        "--title", "Test Title", "--width", "100",
+        "--height", "200", "--button=Accept:0", "--wrap",
+        "--margins", "2", "--center", "--button=Reject:1"
+    ]
+    assert gui_provider.kwargs["input"] == b"Test Text"
+
+
+def test_show_text_dialog_zenity(gui_provider, monkeypatch):
+    monkeypatch.setattr("protontricks.gui.get_gui_provider", lambda: "zenity")
+    gui_provider.returncode = 1
+
+    result = show_text_dialog(
+        title="Test Title",
+        text="Test Text",
+        window_icon="wine",
+        options=DialogOptions(width=100, height=200, ok_label="Accept",
+                              cancel_label="Reject", add_cancel_button=False)
+    )
+
+    assert result is False
+    assert gui_provider.args == [
+        "zenity", "--text-info", "--window-icon", "wine",
+        "--title", "Test Title", "--width", "100",
+        "--height", "200", "--cancel-label", "Reject",
+        "--ok-label", "Accept"
+    ]
+    assert gui_provider.kwargs["input"] == b"Test Text"
+
+
+def test_show_text_dialog_options_none(gui_provider, monkeypatch):
+    monkeypatch.setattr("protontricks.gui.get_gui_provider", lambda: "yad")
+    gui_provider.returncode = 0
+
+    result = show_text_dialog(
+        title="Test Title",
+        text="Test Text",
+        window_icon="wine"
+    )
+
+    assert result is True
+    assert gui_provider.args == [
+        "yad", "--text-info", "--window-icon", "wine",
+        "--title", "Test Title", "--width", "600",
+        "--height", "600", "--button=OK:0", "--wrap",
+        "--margins", "2", "--center"
+    ]
+    assert gui_provider.kwargs["input"] == b"Test Text"
