@@ -32,7 +32,8 @@ class DialogOptions:
 
 
 __all__ = (
-    "DialogOptions", "LocaleError", "get_gui_provider", "select_steam_app_with_gui",
+    "DialogOptions", "LocaleError", "get_gui_provider",
+    "select_steam_app_with_gui",
     "select_steam_installation", "show_text_dialog", "prompt_filesystem_access"
 )
 
@@ -102,7 +103,8 @@ def _get_appid2icon(steam_apps):
 
                     resize_icon = img.size != APP_ICON_SIZE
 
-                    # Resize icons that have a non-standard size to ensure they can
+                    # Resize icons that have a non-standard size to ensure
+                    # they can
                     # be displayed consistently in the app selector
                     if resize_icon:
                         logger.info(
@@ -368,24 +370,7 @@ def select_steam_app_with_gui(steam_apps, steam_path, title=None):
         result = _run_gui(args, input_=cmd_input)
         choice = result.stdout
     except CalledProcessError as exc:
-        # TODO: Remove this hack once the bug has been fixed upstream
-        # Newer versions of zenity have a bug that causes long dropdown choice
-        # lists to crash the command with a specific message.
-        # Since stdout still prints the correct value, we can safely ignore
-        # this error.
-        #
-        # The error is usually the message
-        # 'free(): double free detected in tcache 2', but it can vary
-        # depending on the environment. Instead, check if the returncode
-        # is -6
-        #
-        # Related issues:
-        # https://github.com/Matoking/protontricks/issues/20
-        # https://gitlab.gnome.org/GNOME/zenity/issues/7
-        if exc.returncode == -6:
-            logger.info("Ignoring zenity crash bug")
-            choice = exc.stdout
-        elif exc.returncode in (1, 252):
+        if exc.returncode in (1, 252):
             # YAD returns 252 when dialog is closed by pressing Esc
             # No game was selected
             choice = b""

@@ -13,31 +13,6 @@ from protontricks.steam import SteamApp
 
 
 @pytest.fixture(scope="function")
-def broken_zenity(gui_provider, monkeypatch):
-    """
-    Mock a broken Zenity executable that prints an error as described in
-    the following GitHub issue:
-    https://github.com/Matoking/protontricks/issues/20
-    """
-    def mock_subprocess_run(args, **kwargs):
-        gui_provider.args = args
-
-        raise CalledProcessError(
-            returncode=-6,
-            cmd=args,
-            output=gui_provider.mock_stdout,
-            stderr=b"free(): double free detected in tcache 2\n"
-        )
-
-    monkeypatch.setattr(
-        "protontricks.gui.run",
-        mock_subprocess_run
-    )
-
-    yield gui_provider
-
-
-@pytest.fixture(scope="function")
 def locale_error_zenity(gui_provider, monkeypatch):
     """
     Mock a Zenity executable returning a 255 error due to a locale issue
@@ -210,26 +185,6 @@ class TestSelectApp:
             )
 
         assert exc.value.code == 1
-
-    def test_select_game_broken_zenity(
-            self, broken_zenity, monkeypatch, steam_app_factory, steam_dir):
-        """
-        Try choosing a game with a broken Zenity executable that
-        prints a specific error message that Protontricks knows how to ignore
-        """
-        monkeypatch.setenv("PROTONTRICKS_GUI", "zenity")
-
-        steam_apps = [
-            steam_app_factory(name="Fake game 1", appid=10),
-            steam_app_factory(name="Fake game 2", appid=20)
-        ]
-
-        # Fake user selecting 'Fake game 2'
-        broken_zenity.mock_stdout = "Fake game 2: 20"
-        steam_app = select_steam_app_with_gui(
-            steam_apps=steam_apps, steam_path=steam_dir)
-
-        assert steam_app == steam_apps[1]
 
     def test_select_game_locale_error(
             self, locale_error_zenity, steam_app_factory, steam_dir, caplog):
