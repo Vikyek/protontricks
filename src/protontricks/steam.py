@@ -65,6 +65,7 @@ class SteamApp(object):
         "appid", "name", "prefix_path", "install_path", "icon_path",
         "last_updated", "required_tool_appid", "required_tool_app"
     )
+    # pylint: disable=too-many-arguments,too-many-positional-arguments
 
     def __init__(
             self, name, install_path, icon_path=None, prefix_path=None,
