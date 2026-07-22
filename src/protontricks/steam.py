@@ -11,6 +11,8 @@ from pathlib import Path
 
 import vdf
 
+_PRINTABLE = set(string.printable) - set(string.punctuation)
+
 from ._vdf import binary_loads as vendored_binary_loads
 from .util import is_steam_deck, lower_dict
 
@@ -133,8 +135,7 @@ class SteamApp(object):
             perform a search by removing all symbols
             except ASCII digits and letters and turning it into lowercase
             """
-            printable = set(string.printable) - set(string.punctuation)
-            s = "".join([c for c in s if c in printable])
+            s = "".join([c for c in s if c in _PRINTABLE])
             s = s.lower()
             s = s.replace(" ", "")
             return s
