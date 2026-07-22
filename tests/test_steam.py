@@ -12,7 +12,8 @@ from protontricks.steam import (SteamApp, _get_steamapps_subdirs,
                                 find_steam_installations, find_steam_path,
                                 get_custom_compat_tool_installations,
                                 get_custom_windows_shortcuts, get_steam_apps,
-                                get_steam_lib_paths, iter_appinfo_sections)
+                                get_steam_lib_paths, get_tool_appid,
+                                iter_appinfo_sections)
 
 
 class TestSteamApp:
@@ -1387,3 +1388,35 @@ def test_get_steamapps_subdirs(steam_dir, steam_library_factory):
 
     assert len(steamapps_dirs) == 4
     assert steamapps_dirs[0].name == "steamapps"
+
+def test_get_tool_appid():
+    """
+    Test that get_tool_appid correctly retrieves the App ID from
+    the steam play manifest
+    """
+    steam_play_manifest = {
+        "appinfo": {
+            "extended": {
+                "compat_tools": {
+                    "proton_316": {
+                        "appid": "896660",
+                        "aliases": "proton_316_beta,proton_316_rc"
+                    },
+                    "proton_42": {
+                        "appid": "1054830"
+                    }
+                }
+            }
+        }
+    }
+
+    # Match by default name
+    assert get_tool_appid("proton_316", steam_play_manifest) == "896660"
+    assert get_tool_appid("proton_42", steam_play_manifest) == "1054830"
+
+    # Match by alias
+    assert get_tool_appid("proton_316_beta", steam_play_manifest) == "896660"
+    assert get_tool_appid("proton_316_rc", steam_play_manifest) == "896660"
+
+    # Non-existent
+    assert get_tool_appid("proton_999", steam_play_manifest) is None
