@@ -232,7 +232,7 @@ class TestSteamApp:
         ) is None
 
     def teststeam_appmanifest_stateflags_uninstalled(self, steam_app_factory):
-        """"
+        """
         Ensure an appmanifest file with the "uninstalled" state flag set
         is skipped
 
@@ -254,7 +254,27 @@ class TestSteamApp:
             steam_lib_paths=[]
         ) is None
 
+    def test_steam_appmanifest_stateflags_not_fully_installed(
+            self, steam_app_factory):
+        """
+        Ensure an appmanifest file without the "fully installed" state flag set
+        is skipped
+        """
+        steam_app = steam_app_factory(name="Fake game", appid=10)
 
+        appmanifest_path = \
+            Path(steam_app.install_path).parent.parent / "appmanifest_10.acf"
+
+        # Write an incomplete appmanifest containing a nearly empty 'AppState'
+        # object, without StateFullyInstalled (4) flag.
+        appmanifest_path.write_text(
+            vdf.dumps({"AppState": {"appid": 10, "stateflags": "2"}})
+        )
+
+        assert SteamApp.from_appmanifest(
+            path=appmanifest_path,
+            steam_lib_paths=[]
+        ) is None
 
 
 class TestFindSteamCompatToolApp:
