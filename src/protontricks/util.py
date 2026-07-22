@@ -1,4 +1,5 @@
 import importlib.resources
+import functools
 import itertools
 import locale
 import logging
@@ -54,6 +55,7 @@ def lower_dict(d):
     return {k.lower(): _lower_value(v) for k, v in d.items()}
 
 
+@functools.lru_cache()
 def is_steam_deck():
     """
     Check if we're running on a Steam Deck
@@ -71,6 +73,7 @@ def is_steam_deck():
     return False
 
 
+@functools.lru_cache()
 def is_steamos():
     """
     Check if we're running on SteamOS 3 (or newer)
