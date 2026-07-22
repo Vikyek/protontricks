@@ -808,6 +808,14 @@ class MockSubprocess:
         else:
             self.mock_stdout = mock_stdout
 
+        class MockStdout:
+            def __init__(self, output):
+                self.output = output
+            def read(self):
+                return self.output.encode('utf-8')
+
+        self.stdout = MockStdout(self.mock_stdout)
+
         # The state of the mocked 'bwrap-launcher'. This will be set to False
         # once 'terminate()' is called on the corresponding Popen object to
         # mock the launcher stopping.

@@ -643,23 +643,17 @@ def run_command(
                 str(wine_bin_dir / "bwrap-launcher")
             )
 
-            # TODO: Waiting for launcher to start can be simplified once
-            # ValveSoftware/steam-runtime#593 has been fixed and stdout can
-            # be used instead.
-            launcher_read_fd, launcher_write_fd = os.pipe2(os.O_CLOEXEC)
             launcher_process = _start_process(
-                [str(wine_bin_dir / "bwrap-launcher"), str(launcher_write_fd)],
+                [str(wine_bin_dir / "bwrap-launcher")],
                 wait=False,
-                pass_fds=[launcher_write_fd],
+                stdout=PIPE,
                 env=wine_environ
             )
 
             # The Steam Runtime launcher service will write to the given
             # file descriptor and then close it to indicate the launcher is
             # ready or about to exit (i.e. due to wrong CLI parameters).
-            os.close(launcher_write_fd)
-            with open(launcher_read_fd, "rb") as reader:
-                reader.read()
+            launcher_process.stdout.read()
 
             # Check if the launcher actually started up and is still running.
             try:
