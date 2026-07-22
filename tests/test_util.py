@@ -399,3 +399,39 @@ class TestIsSteamOSOrDeck:
     @pytest.mark.usefixtures("steam_deck")
     def test_is_steamos(self):
         assert is_steamos()
+
+
+class TestGetCacheDir:
+    def test_xdg_cache_home_set(self, monkeypatch, tmp_path):
+        """
+        Test that get_cache_dir uses XDG_CACHE_HOME if it is set.
+        """
+        from protontricks.util import get_cache_dir
+
+        custom_cache = tmp_path / "custom_cache"
+        monkeypatch.setenv("XDG_CACHE_HOME", str(custom_cache))
+
+        cache_dir = get_cache_dir()
+
+        expected_dir = custom_cache / "protontricks"
+        assert cache_dir == expected_dir
+        assert cache_dir.is_dir()
+
+    def test_xdg_cache_home_not_set(self, monkeypatch, tmp_path):
+        """
+        Test that get_cache_dir defaults to ~/.cache if XDG_CACHE_HOME
+        is not set.
+        """
+
+        from protontricks.util import get_cache_dir
+        monkeypatch.delenv("XDG_CACHE_HOME", raising=False)
+        monkeypatch.setenv("HOME", str(tmp_path))
+        # Depending on the system, os.path.expanduser("~") might use
+        # USERPROFILE or other variables.
+        # But for linux, it typically respects HOME.
+
+        cache_dir = get_cache_dir()
+
+        expected_dir = tmp_path / ".cache" / "protontricks"
+        assert cache_dir == expected_dir
+        assert cache_dir.is_dir()

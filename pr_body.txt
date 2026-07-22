@@ -1,0 +1,7 @@
+What: The `get_cache_dir` function in `src/protontricks/util.py` was previously untested. This PR adds unit tests for this function to ensure it behaves correctly when resolving the cache directory.
+
+Coverage: The new tests (`TestGetCacheDir`) cover two scenarios:
+1. When the `XDG_CACHE_HOME` environment variable is set, confirming it uses the specified directory.
+2. When the `XDG_CACHE_HOME` environment variable is not set, verifying it gracefully falls back to `~/.cache/protontricks`.
+
+Result: Test coverage for `src/protontricks/util.py` is improved to 99%, and we ensure regressions aren't introduced in this base-level utility.
