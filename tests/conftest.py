@@ -997,3 +997,10 @@ def desktop_install_cli(monkeypatch, capsys):
     variables, and return the output
     """
     return _run_cli(monkeypatch, capsys, desktop_install_cli_entrypoint)
+
+
+@pytest.fixture(autouse=True)
+def clear_caches():
+    import protontricks.util
+    if hasattr(protontricks.util.is_steamos, "cache_clear"):
+        protontricks.util.is_steamos.cache_clear()

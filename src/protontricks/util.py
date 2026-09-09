@@ -1,3 +1,4 @@
+import functools
 import importlib.resources
 import itertools
 import locale
@@ -71,6 +72,7 @@ def is_steam_deck():
     return False
 
 
+@functools.lru_cache()
 def is_steamos():
     """
     Check if we're running on SteamOS 3 (or newer)
